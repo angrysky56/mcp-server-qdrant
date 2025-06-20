@@ -1,17 +1,10 @@
-# mcp-server-qdrant: A Qdrant MCP server
+# mcp-server-qdrant-enhanced: A Qdrant MCP server
 
-[![smithery badge](https://smithery.ai/badge/mcp-server-qdrant)](https://smithery.ai/protocol/mcp-server-qdrant)
-
-> The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open protocol that enables
-> seamless integration between LLM applications and external data sources and tools. Whether you're building an
-> AI-powered IDE, enhancing a chat interface, or creating custom AI workflows, MCP provides a standardized way to
-> connect LLMs with the context they need.
-
-This repository is an example of how to create a MCP server for [Qdrant](https://qdrant.tech/), a vector search engine.
+![alt text](image.png)
 
 ## Overview
 
-An official Model Context Protocol server for keeping and retrieving memories in the Qdrant vector search engine.
+A Model Context Protocol server for keeping and retrieving memories in the Qdrant vector search engine.
 It acts as a semantic memory layer on top of the Qdrant database.
 
 ## Components
@@ -91,6 +84,42 @@ The server now supports 12+ embedding models with automatic model management:
 - `thenlper/gte-large` - Large general embeddings
 - `intfloat/e5-large-v2` - E5 family, highest quality
 
+**For the enhanced version with 13 tools and advanced features, use the manual configuration below.**
+
+### Quick start for MCP Server Clients i.e. Claude Desktop
+
+#### Enhanced Multi-Collection Mode= Simply add to the claude_desktop_config.json (Recommended)
+### Manual configuration
+
+```json
+{
+  "mcp-server-qdrant": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "/path/to/your/mcp-server-qdrant/src",
+      "run",
+      "mcp-server-qdrant"
+    ],
+    "env": {
+      "QDRANT_URL": "http://localhost:6333",
+      "QDRANT_API_KEY": "",
+      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+      "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+      "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
+      "QDRANT_ENABLE_RESOURCES": "true",
+      "QDRANT_DEFAULT_VECTOR_SIZE": "384",
+      "QDRANT_DEFAULT_DISTANCE_METRIC": "cosine",
+      "QDRANT_MAX_BATCH_SIZE": "100"
+    }
+  }
+}
+```
+
+> [!NOTE]
+> No `COLLECTION_NAME` is set in enhanced mode, enabling multi-collection support. Collections will be created dynamically as needed.
+
+
 ## Environment Variables
 
 The configuration of the server is done using environment variables:
@@ -133,7 +162,7 @@ The configuration of the server is done using environment variables:
 
 All tool descriptions have sensible defaults defined in [`settings.py`](src/mcp_server_qdrant/settings.py).
 
-Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
+OLD- Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
 
 ## Usage Examples
 
@@ -216,7 +245,9 @@ important ones are listed below:
 | `FASTMCP_WARN_ON_DUPLICATE_PROMPTS`   | Show warnings for duplicate prompts                       | `true`        |
 | `FASTMCP_DEPENDENCIES`                | List of dependencies to install in the server environment | `[]`          |
 
-## Installation
+## Installation- Old
+
+**It should remain backward compatible but not sure**
 
 ### Using uvx
 
@@ -257,7 +288,7 @@ FASTMCP_PORT=1234 \
 uvx mcp-server-qdrant --transport sse
 ```
 
-### Using Docker
+### OLD- Using Docker
 
 A Dockerfile is available for building and running the MCP server:
 
@@ -273,7 +304,7 @@ docker run -p 8000:8000 \
   mcp-server-qdrant
 ```
 
-### Installing via Smithery
+### OLD- Installing via Smithery
 
 > [!WARNING]
 > **The [Smithery](https://smithery.ai/protocol/mcp-server-qdrant) installation installs the original limited version with only basic store/find functionality, not this enhanced fork with collection management and dynamic embedding models.**
@@ -283,42 +314,6 @@ To install the original basic version via Smithery:
 ```bash
 npx @smithery/cli install mcp-server-qdrant --client claude
 ```
-
-**For the enhanced version with 13 tools and advanced features, use the manual configuration below.**
-
-### Manual configuration of Claude Desktop
-
-#### Enhanced Multi-Collection Mode (Recommended)
-
-For the full enhanced experience with collection management and dynamic embedding models:
-
-```json
-{
-  "mcp-server-qdrant": {
-    "command": "uv",
-    "args": [
-      "--directory",
-      "/path/to/your/mcp-server-qdrant/src",
-      "run",
-      "mcp-server-qdrant"
-    ],
-    "env": {
-      "QDRANT_URL": "http://localhost:6333",
-      "QDRANT_API_KEY": "",
-      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
-      "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
-      "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
-      "QDRANT_ENABLE_RESOURCES": "true",
-      "QDRANT_DEFAULT_VECTOR_SIZE": "384",
-      "QDRANT_DEFAULT_DISTANCE_METRIC": "cosine",
-      "QDRANT_MAX_BATCH_SIZE": "100"
-    }
-  }
-}
-```
-
-> [!NOTE]
-> No `COLLECTION_NAME` is set in enhanced mode, enabling multi-collection support. Collections will be created dynamically as needed.
 
 #### Single Collection Mode (Backward Compatible)
 
@@ -338,7 +333,6 @@ For compatibility with existing setups using a single default collection:
   }
 }
 ```
-
 #### Local Qdrant Setup
 
 For local development with enhanced features:
@@ -349,7 +343,7 @@ For local development with enhanced features:
     "command": "uv",
     "args": [
       "--directory",
-      "/path/to/your/mcp-server-qdrant/src", 
+      "/path/to/your/mcp-server-qdrant/src",
       "run",
       "mcp-server-qdrant"
     ],
