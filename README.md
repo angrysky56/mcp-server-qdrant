@@ -119,6 +119,11 @@ The server now supports 12+ embedding models with automatic model management:
 > [!NOTE]
 > No `COLLECTION_NAME` is set in enhanced mode, enabling multi-collection support. Collections will be created dynamically as needed.
 
+> Potential issue if security is a concern i.e. not using locally:
+
+/mcp-server-qdrant/src/mcp_server_qdrant/qdrant.py:68: UserWarning: Api key is used with an insecure connection.
+  self._client = AsyncQdrantClient(
+[06/20/25 17:02:02] INFO     Starting MCP server 'mcp-server-qdrant' with transport 'stdio'
 
 ## Environment Variables
 
