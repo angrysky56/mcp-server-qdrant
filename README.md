@@ -169,6 +169,52 @@ All tool descriptions have sensible defaults defined in [`settings.py`](src/mcp_
 
 OLD- Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
 
+## Port Management
+
+The enhanced server includes intelligent port management to avoid conflicts:
+
+### Automatic Port Detection (Recommended)
+The server automatically detects if the default port (8000) is busy and finds an alternative:
+
+```json
+{
+  "env": {
+    "FASTMCP_PORT": "8000"
+  }
+}
+```
+
+If port 8000 is busy, the server will automatically use ports 8001, 8002, etc. You'll see:
+```
+⚠️  Port 8000 was busy. MCP server will use port 8001
+🚀 MCP Server starting on http://localhost:8001
+📡 SSE endpoint: http://localhost:8001/sse
+```
+
+### Manual Port Override
+To force a specific port (disables auto-detection):
+
+```json
+{
+  "env": {
+    "FASTMCP_PORT": "9000"
+  }
+}
+```
+
+### No Port Specified (Full Auto-Detection)
+Omit `FASTMCP_PORT` entirely for complete automatic port assignment:
+
+```json
+{
+  "env": {
+    "QDRANT_URL": "http://localhost:6333"
+  }
+}
+```
+
+The server will scan ports 8000-8099 and use the first available port.
+
 ## Usage Examples
 
 ### Multi-Collection Workflow
@@ -244,7 +290,7 @@ important ones are listed below:
 | `FASTMCP_DEBUG`                       | Enable debug mode                                         | `false`       |
 | `FASTMCP_LOG_LEVEL`                   | Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | `INFO`        |
 | `FASTMCP_HOST`                        | Host address to bind the server to                        | `0.0.0.0`     |
-| `FASTMCP_PORT`                        | Port to run the server on                                 | `8000`        |
+| `FASTMCP_PORT`                        | Port to run the server on (auto-detects if busy)          | `8000`        |
 | `FASTMCP_WARN_ON_DUPLICATE_RESOURCES` | Show warnings for duplicate resources                     | `true`        |
 | `FASTMCP_WARN_ON_DUPLICATE_TOOLS`     | Show warnings for duplicate tools                         | `true`        |
 | `FASTMCP_WARN_ON_DUPLICATE_PROMPTS`   | Show warnings for duplicate prompts                       | `true`        |

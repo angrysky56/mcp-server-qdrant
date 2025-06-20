@@ -20,6 +20,7 @@
         "QDRANT_DEFAULT_DISTANCE_METRIC": "cosine",
         "QDRANT_MAX_BATCH_SIZE": "100",
         "QDRANT_SEARCH_LIMIT": "10",
+        "FASTMCP_PORT": "8001",
         "FASTMCP_LOG_LEVEL": "INFO"
       }
     }

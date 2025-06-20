@@ -4,16 +4,26 @@
 
 This directory contains example configurations for Claude Desktop to use with the enhanced mcp-server-qdrant.
 
-### 1. Enhanced Mode (Recommended)
+### 1. Auto Port Detection (Recommended)
+**File:** `auto_port_claude_config.json`
+
+- **Automatic port management** - Detects port conflicts and finds alternatives
+- **Multi-collection support** - No default collection, create collections as needed  
+- **All enhanced features enabled** - Collection management, dynamic embedding models, resources
+- **Conflict-free** - Perfect for users with multiple services on port 8000
+
+### 2. Enhanced Mode (Fixed Port 8001)
 **File:** `enhanced_claude_config.json`
 
+- **Uses port 8001** - Avoids common port 8000 conflicts
 - **Multi-collection support** - No default collection, create collections as needed
 - **All enhanced features enabled** - Collection management, dynamic embedding models, resources
 - **Clean slate** - Perfect for new setups
 
-### 2. Migration Mode (Upgrade Existing Setup)
+### 3. Migration Mode (Upgrade Existing Setup)
 **File:** `migration_claude_config.json`
 
+- **Uses port 8001** - Avoids port conflicts
 - **Maintains existing collection** - Keeps your `claudes_chroma_collection` as default
 - **All enhanced features enabled** - Adds new capabilities while preserving data
 - **Backward compatible** - Your existing memories remain accessible

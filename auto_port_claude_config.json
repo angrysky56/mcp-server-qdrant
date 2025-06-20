@@ -17,9 +17,8 @@
         "QDRANT_ENABLE_RESOURCES": "true",
         "QDRANT_DEFAULT_VECTOR_SIZE": "384",
         "QDRANT_DEFAULT_DISTANCE_METRIC": "cosine",
-        "QDRANT_MAX_BATCH_SIZE": "10000",
-        "QDRANT_SEARCH_LIMIT": "1000",
-        "FASTMCP_PORT": "8001",
+        "QDRANT_MAX_BATCH_SIZE": "100",
+        "QDRANT_SEARCH_LIMIT": "10",
         "FASTMCP_LOG_LEVEL": "INFO"
       }
     }
