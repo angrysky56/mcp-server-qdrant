@@ -15,6 +15,35 @@ DEFAULT_TOOL_FIND_DESCRIPTION = (
     " - Get some personal information about the user"
 )
 
+# Enhanced tool descriptions
+DEFAULT_TOOL_BATCH_STORE_DESCRIPTION = (
+    "Store multiple memories efficiently in a single operation."
+)
+DEFAULT_TOOL_SCROLL_DESCRIPTION = (
+    "Browse through collection contents with pagination and optional filtering."
+)
+DEFAULT_TOOL_LIST_COLLECTIONS_DESCRIPTION = (
+    "List all available Qdrant collections with their basic information."
+)
+DEFAULT_TOOL_CREATE_COLLECTION_DESCRIPTION = (
+    "Create a new Qdrant collection with specified parameters including vector size and distance metric."
+)
+DEFAULT_TOOL_GET_COLLECTION_INFO_DESCRIPTION = (
+    "Get detailed information about a specific collection including configuration and statistics."
+)
+DEFAULT_TOOL_DELETE_COLLECTION_DESCRIPTION = (
+    "Delete a collection permanently. Use with caution as this cannot be undone."
+)
+DEFAULT_TOOL_HYBRID_SEARCH_DESCRIPTION = (
+    "Perform advanced search with multiple search strategies and complex filtering."
+)
+DEFAULT_TOOL_SET_COLLECTION_EMBEDDING_MODEL_DESCRIPTION = (
+    "Set or change the embedding model for a specific collection."
+)
+DEFAULT_TOOL_LIST_EMBEDDING_MODELS_DESCRIPTION = (
+    "List all available embedding models and their specifications."
+)
+
 METADATA_PATH = "metadata"
 
 
@@ -30,6 +59,42 @@ class ToolSettings(BaseSettings):
     tool_find_description: str = Field(
         default=DEFAULT_TOOL_FIND_DESCRIPTION,
         validation_alias="TOOL_FIND_DESCRIPTION",
+    )
+    tool_batch_store_description: str = Field(
+        default=DEFAULT_TOOL_BATCH_STORE_DESCRIPTION,
+        validation_alias="TOOL_BATCH_STORE_DESCRIPTION",
+    )
+    tool_scroll_description: str = Field(
+        default=DEFAULT_TOOL_SCROLL_DESCRIPTION,
+        validation_alias="TOOL_SCROLL_DESCRIPTION",
+    )
+    tool_list_collections_description: str = Field(
+        default=DEFAULT_TOOL_LIST_COLLECTIONS_DESCRIPTION,
+        validation_alias="TOOL_LIST_COLLECTIONS_DESCRIPTION",
+    )
+    tool_create_collection_description: str = Field(
+        default=DEFAULT_TOOL_CREATE_COLLECTION_DESCRIPTION,
+        validation_alias="TOOL_CREATE_COLLECTION_DESCRIPTION",
+    )
+    tool_get_collection_info_description: str = Field(
+        default=DEFAULT_TOOL_GET_COLLECTION_INFO_DESCRIPTION,
+        validation_alias="TOOL_GET_COLLECTION_INFO_DESCRIPTION",
+    )
+    tool_delete_collection_description: str = Field(
+        default=DEFAULT_TOOL_DELETE_COLLECTION_DESCRIPTION,
+        validation_alias="TOOL_DELETE_COLLECTION_DESCRIPTION",
+    )
+    tool_hybrid_search_description: str = Field(
+        default=DEFAULT_TOOL_HYBRID_SEARCH_DESCRIPTION,
+        validation_alias="TOOL_HYBRID_SEARCH_DESCRIPTION",
+    )
+    tool_set_collection_embedding_model_description: str = Field(
+        default=DEFAULT_TOOL_SET_COLLECTION_EMBEDDING_MODEL_DESCRIPTION,
+        validation_alias="TOOL_SET_COLLECTION_EMBEDDING_MODEL_DESCRIPTION",
+    )
+    tool_list_embedding_models_description: str = Field(
+        default=DEFAULT_TOOL_LIST_EMBEDDING_MODELS_DESCRIPTION,
+        validation_alias="TOOL_LIST_EMBEDDING_MODELS_DESCRIPTION",
     )
 
 
@@ -89,6 +154,26 @@ class QdrantSettings(BaseSettings):
 
     allow_arbitrary_filter: bool = Field(
         default=False, validation_alias="QDRANT_ALLOW_ARBITRARY_FILTER"
+    )
+    
+    # Enhanced settings for multi-collection support
+    enable_collection_management: bool = Field(
+        default=True, validation_alias="QDRANT_ENABLE_COLLECTION_MANAGEMENT"
+    )
+    enable_dynamic_embedding_models: bool = Field(
+        default=True, validation_alias="QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS"
+    )
+    default_vector_size: int = Field(
+        default=384, validation_alias="QDRANT_DEFAULT_VECTOR_SIZE"
+    )
+    default_distance_metric: str = Field(
+        default="cosine", validation_alias="QDRANT_DEFAULT_DISTANCE_METRIC"
+    )
+    max_batch_size: int = Field(
+        default=100, validation_alias="QDRANT_MAX_BATCH_SIZE"
+    )
+    enable_resources: bool = Field(
+        default=True, validation_alias="QDRANT_ENABLE_RESOURCES"
     )
 
     def filterable_fields_dict(self) -> dict[str, FilterableField]:

@@ -16,40 +16,186 @@ It acts as a semantic memory layer on top of the Qdrant database.
 
 ## Components
 
-### Tools
+### Enhanced Tools (13 Total)
 
-1. `qdrant-store`
-   - Store some information in the Qdrant database
-   - Input:
-     - `information` (string): Information to store
-     - `metadata` (JSON): Optional metadata to store
-     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.
-                                   If there is a default collection name, this field is not enabled.
-   - Returns: Confirmation message
-2. `qdrant-find`
-   - Retrieve relevant information from the Qdrant database
-   - Input:
-     - `query` (string): Query to use for searching
-     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.
-                                   If there is a default collection name, this field is not enabled.
-   - Returns: Information stored in the Qdrant database as separate messages
+#### Core Storage & Search
+1. **`qdrant-store`** - Store information in Qdrant database
+   - `information` (string): Information to store
+   - `metadata` (JSON): Optional metadata
+   - `collection_name` (string): Target collection (if no default set)
+
+2. **`qdrant-find`** - Retrieve relevant information from database
+   - `query` (string): Search query
+   - `collection_name` (string): Collection to search (if no default set)
+
+#### Collection Management
+3. **`list_collections`** - List all available Qdrant collections
+4. **`get_collection_info`** - Get detailed collection statistics and configuration
+   - `collection_name` (string): Collection to inspect
+5. **`create_collection`** - Create new collection with custom settings
+   - `collection_name` (string): Name for new collection
+   - `vector_size` (int): Vector dimensions (e.g., 384, 768, 1024)
+   - `distance` (string): Distance metric (cosine, dot, euclidean, manhattan)
+   - `embedding_model` (string): Optional embedding model to use
+6. **`delete_collection`** - Delete collection permanently
+   - `collection_name` (string): Collection to delete
+   - `confirm` (bool): Required confirmation flag
+
+#### Dynamic Embedding Models
+7. **`list_embedding_models`** - List all available embedding models with specs
+8. **`set_collection_embedding_model`** - Assign embedding model to collection
+   - `collection_name` (string): Target collection
+   - `model_name` (string): Embedding model name
+
+#### Advanced Search & Operations
+9. **`hybrid_search`** - Advanced search with similarity scores and filtering
+   - `query` (string): Search query
+   - `collection_name` (string): Collection to search
+   - `limit` (int): Maximum results (default: 10)
+   - `min_score` (float): Minimum similarity threshold
+   - `include_scores` (bool): Include similarity scores in results
+
+10. **`scroll_collection`** - Browse collection contents with pagination
+    - `collection_name` (string): Collection to browse
+    - `limit` (int): Entries per page (default: 20)
+    - `offset` (string): Pagination offset (point ID)
+
+11. **`batch_store`** - Store multiple entries efficiently
+    - `entries` (list): List of entries with content, metadata, and optional IDs
+    - `collection_name` (string): Target collection
+
+### Resources
+
+1. **`qdrant://collections`** - Live overview of all collections with statistics
+2. **`qdrant://collection/{collection_name}/schema`** - Detailed schema and configuration for specific collection
+
+### Supported Embedding Models
+
+The server now supports 12+ embedding models with automatic model management:
+
+**Compact Models (384D):**
+- `sentence-transformers/all-MiniLM-L6-v2` - Lightweight, fast general use
+- `sentence-transformers/all-MiniLM-L12-v2` - Better quality than L6
+- `BAAI/bge-small-en-v1.5` - Optimized for English
+- `thenlper/gte-small` - General text embeddings
+- `intfloat/e5-small-v2` - E5 family, efficient
+
+**Balanced Models (768D):**
+- `sentence-transformers/all-mpnet-base-v2` - High quality, balanced
+- `BAAI/bge-base-en-v1.5` - Better English embeddings
+- `thenlper/gte-base` - General text embeddings
+- `intfloat/e5-base-v2` - E5 family, balanced
+
+**High-Quality Models (1024D):**
+- `BAAI/bge-large-en-v1.5` - Highest quality English
+- `thenlper/gte-large` - Large general embeddings
+- `intfloat/e5-large-v2` - E5 family, highest quality
 
 ## Environment Variables
 
 The configuration of the server is done using environment variables:
 
+### Core Configuration
 | Name                     | Description                                                         | Default Value                                                     |
 |--------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------|
 | `QDRANT_URL`             | URL of the Qdrant server                                            | None                                                              |
 | `QDRANT_API_KEY`         | API key for the Qdrant server                                       | None                                                              |
-| `COLLECTION_NAME`        | Name of the default collection to use.                              | None                                                              |
+| `COLLECTION_NAME`        | Name of the default collection to use                               | None                                                              |
 | `QDRANT_LOCAL_PATH`      | Path to the local Qdrant database (alternative to `QDRANT_URL`)     | None                                                              |
 | `EMBEDDING_PROVIDER`     | Embedding provider to use (currently only "fastembed" is supported) | `fastembed`                                                       |
-| `EMBEDDING_MODEL`        | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |
-| `TOOL_STORE_DESCRIPTION` | Custom description for the store tool                               | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
-| `TOOL_FIND_DESCRIPTION`  | Custom description for the find tool                                | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |
+| `EMBEDDING_MODEL`        | Name of the default embedding model to use                          | `sentence-transformers/all-MiniLM-L6-v2`                          |
+
+### Enhanced Features Configuration
+| Name                                        | Description                                                  | Default Value |
+|--------------------------------------------|--------------------------------------------------------------|---------------|
+| `QDRANT_ENABLE_COLLECTION_MANAGEMENT`      | Enable collection management tools                           | `true`        |
+| `QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS`   | Enable dynamic embedding model assignment per collection     | `true`        |
+| `QDRANT_ENABLE_RESOURCES`                  | Enable MCP resources for collection information             | `true`        |
+| `QDRANT_DEFAULT_VECTOR_SIZE`               | Default vector size for new collections                     | `384`         |
+| `QDRANT_DEFAULT_DISTANCE_METRIC`           | Default distance metric (cosine, dot, euclidean, manhattan) | `cosine`      |
+| `QDRANT_MAX_BATCH_SIZE`                    | Maximum number of entries per batch operation               | `100`         |
+| `QDRANT_SEARCH_LIMIT`                      | Default maximum search results                               | `10`          |
+| `QDRANT_READ_ONLY`                         | Enable read-only mode (disables write operations)           | `false`       |
+| `QDRANT_ALLOW_ARBITRARY_FILTER`            | Allow arbitrary filtering in search                         | `false`       |
+
+### Tool Descriptions (Customizable)
+| Name                                        | Description                                    | Default Value |
+|--------------------------------------------|------------------------------------------------|---------------|
+| `TOOL_STORE_DESCRIPTION`                   | Custom description for the store tool         | See defaults  |
+| `TOOL_FIND_DESCRIPTION`                    | Custom description for the find tool          | See defaults  |
+| `TOOL_BATCH_STORE_DESCRIPTION`             | Custom description for batch store tool       | See defaults  |
+| `TOOL_LIST_COLLECTIONS_DESCRIPTION`        | Custom description for list collections tool  | See defaults  |
+| `TOOL_CREATE_COLLECTION_DESCRIPTION`       | Custom description for create collection tool | See defaults  |
+| `TOOL_DELETE_COLLECTION_DESCRIPTION`       | Custom description for delete collection tool | See defaults  |
+| `TOOL_HYBRID_SEARCH_DESCRIPTION`           | Custom description for hybrid search tool     | See defaults  |
+| `TOOL_SCROLL_DESCRIPTION`                  | Custom description for scroll collection tool | See defaults  |
+| `TOOL_LIST_EMBEDDING_MODELS_DESCRIPTION`   | Custom description for list models tool       | See defaults  |
+
+All tool descriptions have sensible defaults defined in [`settings.py`](src/mcp_server_qdrant/settings.py).
 
 Note: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.
+
+## Usage Examples
+
+### Multi-Collection Workflow
+```python
+# List available collections
+collections = await list_collections()
+
+# Create a specialized collection for code snippets
+await create_collection(
+    collection_name="code_snippets",
+    vector_size=768,
+    distance="cosine",
+    embedding_model="sentence-transformers/all-mpnet-base-v2"
+)
+
+# Create another collection for documentation
+await create_collection(
+    collection_name="documentation",
+    vector_size=384,
+    embedding_model="BAAI/bge-small-en-v1.5"
+)
+
+# Store data in different collections
+await store("Python function for sorting", "code_snippets")
+await store("API documentation for REST endpoints", "documentation")
+```
+
+### Advanced Search with Scoring
+```python
+# Perform hybrid search with similarity scores
+results = await hybrid_search(
+    query="authentication methods",
+    collection_name="documentation",
+    limit=5,
+    min_score=0.7,
+    include_scores=True
+)
+```
+
+### Batch Operations
+```python
+# Store multiple entries efficiently
+entries = [
+    {"content": "Function to validate emails", "metadata": {"type": "utility"}},
+    {"content": "Database connection helper", "metadata": {"type": "database"}},
+    {"content": "Error handling middleware", "metadata": {"type": "middleware"}}
+]
+await batch_store(entries, "code_snippets")
+```
+
+### Collection Management
+```python
+# Get detailed collection information
+info = await get_collection_info("code_snippets")
+
+# Browse collection contents
+await scroll_collection("code_snippets", limit=10)
+
+# Set embedding model for existing collection
+await set_collection_embedding_model("legacy_data", "intfloat/e5-base-v2")
+```
 
 > [!IMPORTANT]
 > Command-line arguments are not supported anymore! Please use environment variables for all configuration.
@@ -129,16 +275,54 @@ docker run -p 8000:8000 \
 
 ### Installing via Smithery
 
-To install Qdrant MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/mcp-server-qdrant):
+> [!WARNING]
+> **The [Smithery](https://smithery.ai/protocol/mcp-server-qdrant) installation installs the original limited version with only basic store/find functionality, not this enhanced fork with collection management and dynamic embedding models.**
+
+To install the original basic version via Smithery:
 
 ```bash
 npx @smithery/cli install mcp-server-qdrant --client claude
 ```
 
+**For the enhanced version with 13 tools and advanced features, use the manual configuration below.**
+
 ### Manual configuration of Claude Desktop
 
-To use this server with the Claude Desktop app, add the following configuration to the "mcpServers" section of your
-`claude_desktop_config.json`:
+#### Enhanced Multi-Collection Mode (Recommended)
+
+For the full enhanced experience with collection management and dynamic embedding models:
+
+```json
+{
+  "mcp-server-qdrant": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "/path/to/your/mcp-server-qdrant/src",
+      "run",
+      "mcp-server-qdrant"
+    ],
+    "env": {
+      "QDRANT_URL": "http://localhost:6333",
+      "QDRANT_API_KEY": "",
+      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+      "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+      "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
+      "QDRANT_ENABLE_RESOURCES": "true",
+      "QDRANT_DEFAULT_VECTOR_SIZE": "384",
+      "QDRANT_DEFAULT_DISTANCE_METRIC": "cosine",
+      "QDRANT_MAX_BATCH_SIZE": "100"
+    }
+  }
+}
+```
+
+> [!NOTE]
+> No `COLLECTION_NAME` is set in enhanced mode, enabling multi-collection support. Collections will be created dynamically as needed.
+
+#### Single Collection Mode (Backward Compatible)
+
+For compatibility with existing setups using a single default collection:
 
 ```json
 {
@@ -155,17 +339,26 @@ To use this server with the Claude Desktop app, add the following configuration 
 }
 ```
 
-For local Qdrant mode:
+#### Local Qdrant Setup
+
+For local development with enhanced features:
 
 ```json
 {
-  "qdrant": {
-    "command": "uvx",
-    "args": ["mcp-server-qdrant"],
+  "mcp-server-qdrant": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "/path/to/your/mcp-server-qdrant/src", 
+      "run",
+      "mcp-server-qdrant"
+    ],
     "env": {
-      "QDRANT_LOCAL_PATH": "/path/to/qdrant/database",
-      "COLLECTION_NAME": "your-collection-name",
-      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      "QDRANT_LOCAL_PATH": "/tmp/qdrant_storage",
+      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+      "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+      "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
+      "QDRANT_ENABLE_RESOURCES": "true"
     }
   }
 }
