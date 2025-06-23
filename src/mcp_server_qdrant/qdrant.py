@@ -127,6 +127,7 @@ class QdrantConnector:
         :return: A list of entries found.
         """
         collection_name = collection_name or self._default_collection_name
+        assert collection_name is not None
         collection_exists = await self._client.collection_exists(collection_name)
         if not collection_exists:
             return []
@@ -149,8 +150,8 @@ class QdrantConnector:
 
         return [
             Entry(
-                content=result.payload["document"],
-                metadata=result.payload.get("metadata"),
+                content=(result.payload["document"] if result.payload and "document" in result.payload else ""),
+                metadata=(result.payload.get("metadata") if result.payload else None),
             )
             for result in search_results.points
         ]
@@ -197,20 +198,30 @@ class QdrantConnector:
             collection_exists = await self._client.collection_exists(collection_name)
             if not collection_exists:
                 return None
-            
+
             info = await self._client.get_collection(collection_name)
-            
+
             # Extract vector configuration
             vector_size = None
             distance_metric = None
             if hasattr(info, 'config') and info.config and hasattr(info.config, 'params'):
                 if hasattr(info.config.params, 'vectors'):
                     vectors_config = info.config.params.vectors
-                    if hasattr(vectors_config, 'size'):
+                    # vectors_config is usually a dict of vector_name -> VectorParams
+                    if isinstance(vectors_config, dict):
+                        # Take the first vector config if available
+                        for vp in vectors_config.values():
+                            if hasattr(vp, 'size'):
+                                vector_size = vp.size
+                            if hasattr(vp, 'distance'):
+                                distance_metric = vp.distance.name if hasattr(vp.distance, 'name') else str(vp.distance)
+                            break  # Only use the first vector config
+                    # If it's a single VectorParams (older qdrant), handle that as well
+                    elif vectors_config is not None and hasattr(vectors_config, 'size'):
                         vector_size = vectors_config.size
-                    if hasattr(vectors_config, 'distance'):
-                        distance_metric = vectors_config.distance.name if hasattr(vectors_config.distance, 'name') else str(vectors_config.distance)
-            
+                        if hasattr(vectors_config, 'distance'):
+                            distance_metric = vectors_config.distance.name if hasattr(vectors_config.distance, 'name') else str(vectors_config.distance)
+
             return CollectionInfo(
                 name=collection_name,
                 vectors_count=getattr(info, 'vectors_count', 0) or 0,
@@ -249,12 +260,12 @@ class QdrantConnector:
                 "euclidean": models.Distance.EUCLID,
                 "manhattan": models.Distance.MANHATTAN
             }
-            
+
             distance_metric = distance_map.get(distance.lower(), models.Distance.COSINE)
-            
+
             # Use embedding provider vector name if provided, otherwise use the default embedding provider's name
             vector_name = embedding_provider.get_vector_name() if embedding_provider else self._embedding_provider.get_vector_name()
-            
+
             await self._client.create_collection(
                 collection_name=collection_name,
                 vectors_config={
@@ -264,7 +275,7 @@ class QdrantConnector:
                     )
                 },
             )
-            
+
             # Create payload indexes if configured
             if self._field_indexes:
                 for field_name, field_type in self._field_indexes.items():
@@ -273,7 +284,7 @@ class QdrantConnector:
                         field_name=field_name,
                         field_schema=field_type,
                     )
-            
+
             return True
         except Exception as e:
             logger.error(f"Error creating collection {collection_name}: {e}")
@@ -311,11 +322,11 @@ class QdrantConnector:
             # Prepare points for batch upload
             points = []
             vector_name = self._embedding_provider.get_vector_name()
-            
+
             for i, (entry, embedding) in enumerate(zip(entries, embeddings)):
                 point_id = entry.id or uuid.uuid4().hex
                 payload = {"document": entry.content, METADATA_PATH: entry.metadata}
-                
+
                 points.append(models.PointStruct(
                     id=point_id,
                     vector={vector_name: embedding},
@@ -327,7 +338,7 @@ class QdrantConnector:
                 collection_name=collection_name,
                 points=points,
             )
-            
+
             return len(points)
         except Exception as e:
             logger.error(f"Error in batch store: {e}")
@@ -354,7 +365,7 @@ class QdrantConnector:
         """
         collection_name = collection_name or self._default_collection_name
         assert collection_name is not None
-        
+
         collection_exists = await self._client.collection_exists(collection_name)
         if not collection_exists:
             return [], None
@@ -368,7 +379,7 @@ class QdrantConnector:
                 with_payload=with_payload,
                 with_vectors=with_vectors
             )
-            
+
             entries = []
             for point in result[0]:  # result is tuple (points, next_offset)
                 if with_payload and point.payload:
@@ -378,8 +389,9 @@ class QdrantConnector:
                 else:
                     # If no payload, create entry with point ID as content
                     entries.append(Entry(content=f"Point ID: {point.id}", metadata={"point_id": point.id}))
-            
-            return entries, result[1]  # entries, next_offset
+
+            next_offset = str(result[1]) if result[1] is not None else None
+            return entries, next_offset  # entries, next_offset
         except Exception as e:
             logger.error(f"Error scrolling collection {collection_name}: {e}")
             return [], None
@@ -404,6 +416,7 @@ class QdrantConnector:
         :return: List of (entry, score) tuples.
         """
         collection_name = collection_name or self._default_collection_name
+        assert collection_name is not None
         collection_exists = await self._client.collection_exists(collection_name)
         if not collection_exists:
             return []
@@ -414,7 +427,7 @@ class QdrantConnector:
 
             # Prepare search parameters
             params = search_params or {}
-            
+
             search_results = await self._client.query_points(
                 collection_name=collection_name,
                 query=query_vector,
@@ -428,8 +441,8 @@ class QdrantConnector:
             results = []
             for result in search_results.points:
                 entry = Entry(
-                    content=result.payload["document"],
-                    metadata=result.payload.get(METADATA_PATH),
+                    content=(result.payload["document"] if result.payload and "document" in result.payload else ""),
+                    metadata=(result.payload.get(METADATA_PATH) if result.payload else None),
                 )
                 score = result.score if hasattr(result, 'score') else 0.0
                 results.append((entry, score))
