@@ -487,9 +487,21 @@ class EnhancedQdrantMCPServer(FastMCP):
                         if "content" not in entry_dict:
                             return f"Entry {i} missing required 'content' field"
 
+                        # Parse metadata from JSON string if needed
+                        parsed_metadata = None
+                        metadata = entry_dict.get("metadata")
+                        if metadata:
+                            if isinstance(metadata, str):
+                                try:
+                                    parsed_metadata = json.loads(metadata)
+                                except json.JSONDecodeError:
+                                    return f"Entry {i}: Invalid metadata JSON: {metadata}"
+                            else:
+                                parsed_metadata = metadata
+
                         batch_entries.append(BatchEntry(
                             content=entry_dict["content"],
-                            metadata=entry_dict.get("metadata"),
+                            metadata=parsed_metadata,
                             id=entry_dict.get("id")
                         ))
 
