@@ -19,9 +19,17 @@ from mcp_server_qdrant.port_manager import initialize_port_management, print_ser
 try:
     port = initialize_port_management()
     print_server_info()
+except RuntimeError as e:
+    print(f"❌ Critical port management error: {e}")
+    print("🛑 Server cannot start - please resolve port conflicts or restart system")
+    exit(1)
 except Exception as e:
     print(f"⚠️  Port management initialization failed: {e}")
-    print("🔄 Continuing with default configuration...")
+    print("🔄 Attempting to continue with default configuration...")
+    # Set a fallback port in environment
+    import os
+    if not os.environ.get("FASTMCP_PORT"):
+        os.environ["FASTMCP_PORT"] = "8000"
 
 mcp = ServerClass(
     tool_settings=ToolSettings(),

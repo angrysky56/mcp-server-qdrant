@@ -16,7 +16,8 @@ class PortManager:
     
     DEFAULT_PORT = 8000
     PORT_RANGE_START = 8000
-    PORT_RANGE_END = 8099
+    PORT_RANGE_END = 8199  # Expanded range for better availability
+    EXTENDED_RANGE_END = 9099  # Emergency extended range
     
     @staticmethod
     def is_port_available(port: int, host: str = "localhost") -> bool:
@@ -41,7 +42,8 @@ class PortManager:
         preferred_port: Optional[int] = None,
         start_port: Optional[int] = None,
         end_port: Optional[int] = None,
-        host: str = "localhost"
+        host: str = "localhost",
+        use_extended_range: bool = False
     ) -> int:
         """
         Find an available port within a range.
@@ -50,8 +52,9 @@ class PortManager:
         :param start_port: Start of port range to search
         :param end_port: End of port range to search  
         :param host: Host to check on
+        :param use_extended_range: Whether to search extended range if primary fails
         :return: Available port number
-        :raises RuntimeError: If no available port found in range
+        :raises RuntimeError: If no available port found in any range
         """
         start_port = start_port or PortManager.PORT_RANGE_START
         end_port = end_port or PortManager.PORT_RANGE_END
@@ -64,7 +67,8 @@ class PortManager:
             else:
                 logger.warning(f"Preferred port {preferred_port} is not available")
         
-        # Search range for available port
+        # Search primary range for available port
+        logger.debug(f"Searching for available port in range {start_port}-{end_port}")
         for port in range(start_port, end_port + 1):
             if port == preferred_port:
                 continue  # Already tried
@@ -73,7 +77,29 @@ class PortManager:
                 logger.info(f"Found available port {port}")
                 return port
         
-        raise RuntimeError(f"No available ports found in range {start_port}-{end_port}")
+        # If use_extended_range is True, try the extended range
+        if use_extended_range and end_port < PortManager.EXTENDED_RANGE_END:
+            logger.warning(f"Primary range {start_port}-{end_port} exhausted, searching extended range")
+            extended_start = max(end_port + 1, PortManager.PORT_RANGE_END + 1)
+            for port in range(extended_start, PortManager.EXTENDED_RANGE_END + 1):
+                if PortManager.is_port_available(port, host):
+                    logger.info(f"Found available port {port} in extended range")
+                    return port
+        
+        # If still no port found, try system-assigned port as last resort
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(('', 0))  # Let system assign port
+            _, port = sock.getsockname()
+            sock.close()
+            
+            if port >= 1024:  # Ensure it's not a privileged port
+                logger.warning(f"Using system-assigned port {port} as last resort")
+                return port
+        except Exception as e:
+            logger.error(f"Failed to get system-assigned port: {e}")
+        
+        raise RuntimeError(f"No available ports found in any range (tried {start_port}-{PortManager.EXTENDED_RANGE_END})")
     
     @staticmethod
     def setup_port_from_env() -> int:
@@ -81,9 +107,12 @@ class PortManager:
         Setup port from environment variables with automatic detection fallback.
         
         :return: Port number to use
+        :raises RuntimeError: If no available port can be found anywhere
         """
         # Check if port is explicitly set
         env_port = os.environ.get("FASTMCP_PORT")
+        preferred_port = None
+        
         if env_port:
             try:
                 requested_port = int(env_port)
@@ -92,17 +121,19 @@ class PortManager:
                     return requested_port
                 else:
                     logger.warning(f"Configured port {requested_port} is not available, finding alternative...")
-                    # Fall through to auto-detection with this as preferred
                     preferred_port = requested_port
             except ValueError:
                 logger.error(f"Invalid port number in FASTMCP_PORT: {env_port}")
-                preferred_port = None
+                preferred_port = PortManager.DEFAULT_PORT
         else:
             preferred_port = PortManager.DEFAULT_PORT
         
-        # Auto-detect available port
+        # Auto-detect available port with extended search
         try:
-            available_port = PortManager.find_available_port(preferred_port)
+            available_port = PortManager.find_available_port(
+                preferred_port=preferred_port,
+                use_extended_range=True
+            )
             
             # Update environment variable so FastMCP uses the found port
             os.environ["FASTMCP_PORT"] = str(available_port)
@@ -114,9 +145,11 @@ class PortManager:
             return available_port
             
         except RuntimeError as e:
-            logger.error(f"Failed to find available port: {e}")
-            # Fallback to original port and let it fail naturally with a clear error
-            return preferred_port or PortManager.DEFAULT_PORT
+            logger.error(f"Failed to find any available port: {e}")
+            print(f"❌ Unable to find an available port for the MCP server")
+            print(f"   This could indicate system port exhaustion or network issues")
+            print(f"   Try freeing up some ports or restarting network services")
+            raise RuntimeError(f"Port allocation failed: {e}") from e
     
     @staticmethod
     def get_server_url(port: Optional[int] = None, host: str = "localhost") -> str:
@@ -133,14 +166,57 @@ class PortManager:
         return f"http://{host}:{port}"
 
 
+    @staticmethod
+    def diagnose_port_issues(port_range_start: int = None, port_range_end: int = None) -> None:
+        """
+        Diagnose and report common port issues.
+        
+        :param port_range_start: Start of range to check
+        :param port_range_end: End of range to check
+        """
+        start = port_range_start or PortManager.PORT_RANGE_START
+        end = port_range_end or PortManager.EXTENDED_RANGE_END
+        
+        print(f"🔍 Diagnosing port availability in range {start}-{end}...")
+        
+        available_count = 0
+        unavailable_ports = []
+        
+        for port in range(start, min(start + 50, end + 1)):  # Check first 50 ports for speed
+            if PortManager.is_port_available(port):
+                available_count += 1
+            else:
+                unavailable_ports.append(port)
+        
+        print(f"📊 Found {available_count} available ports in sample range {start}-{start+49}")
+        
+        if unavailable_ports:
+            print(f"🚫 Busy ports detected: {unavailable_ports[:10]}{'...' if len(unavailable_ports) > 10 else ''}")
+            
+        if available_count == 0:
+            print("⚠️  No available ports found in sample range!")
+            print("💡 Suggestions:")
+            print("   • Check if other MCP servers are running")
+            print("   • Kill any stuck processes: pkill -f mcp-server")
+            print("   • Restart system network services")
+            print("   • Use a different port range with FASTMCP_PORT environment variable")
+
+
 def initialize_port_management() -> int:
     """
     Initialize port management for the MCP server.
     Call this early in server startup.
     
     :return: Port number that will be used
+    :raises RuntimeError: If no available port can be found
     """
-    return PortManager.setup_port_from_env()
+    try:
+        return PortManager.setup_port_from_env()
+    except RuntimeError as e:
+        # Run diagnostics to help user understand the issue
+        print("🔧 Running port diagnostics...")
+        PortManager.diagnose_port_issues()
+        raise e
 
 
 def print_server_info():
