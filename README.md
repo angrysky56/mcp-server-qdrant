@@ -98,6 +98,68 @@ The server now supports 12+ embedding models with automatic model management:
 
 ## 🚀 Quick Start
 
+### Installation Options
+
+#### Option 1: Development Setup (Recommended for customization)
+Clone and use the repository directly:
+```bash
+git clone https://github.com/your-repo/mcp-server-qdrant.git
+cd mcp-server-qdrant
+```
+
+Use this Claude Desktop config:
+```json
+{
+  "mcpServers": {
+    "mcp-server-qdrant": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/your-username/path/to/mcp-server-qdrant/src",
+        "run",
+        "mcp-server-qdrant"
+      ],
+      "env": {
+        "QDRANT_MODE": "docker",
+        "QDRANT_AUTO_DOCKER": "true",
+        "QDRANT_API_KEY": "",
+        "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
+        "QDRANT_ENABLE_RESOURCES": "true"
+      }
+    }
+  }
+}
+```
+
+#### Option 2: Global Installation
+Install globally using pipx or uvx:
+```bash
+# Using pipx (recommended)
+pipx install mcp-server-qdrant
+
+# Or using uvx
+uvx install mcp-server-qdrant
+```
+
+Use this Claude Desktop config:
+```json
+{
+  "mcpServers": {
+    "mcp-server-qdrant": {
+      "command": "uvx",
+      "args": ["mcp-server-qdrant"],
+      "env": {
+        "QDRANT_MODE": "docker",
+        "QDRANT_AUTO_DOCKER": "true",
+        "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true"
+      }
+    }
+  }
+}
+```
+
 ### Deployment Modes
 
 Choose the deployment mode that best fits your needs:
@@ -142,16 +204,68 @@ Add to your `claude_desktop_config.json`:
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/your/mcp-server-qdrant/src",
+        "/home/your-username/Repositories/mcp-server-qdrant/src",
         "run",
         "mcp-server-qdrant"
       ],
       "env": {
         "QDRANT_MODE": "docker",
         "QDRANT_AUTO_DOCKER": "true",
+        "QDRANT_API_KEY": "",
         "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
         "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
         "QDRANT_ENABLE_RESOURCES": "true"
+      }
+    }
+  }
+}
+```
+
+### LM Studio Configuration
+
+Add to your LM Studio MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "mcp-server-qdrant": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/your-username/Repositories/mcp-server-qdrant/src",
+        "run",
+        "mcp-server-qdrant",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "QDRANT_MODE": "embedded",
+        "QDRANT_COLLECTION_NAME": "lm_studio_memories",
+        "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
+        "QDRANT_ENABLE_RESOURCES": "true"
+      }
+    }
+  }
+}
+```
+
+**Alternative using installed package:**
+```json
+{
+  "mcpServers": {
+    "mcp-server-qdrant": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-qdrant",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "QDRANT_MODE": "embedded",
+        "QDRANT_COLLECTION_NAME": "lm_studio_memories",
+        "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true"
       }
     }
   }

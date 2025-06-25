@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 class QdrantMCPServer(FastMCP):
     """
     Enhanced MCP server with improved embedding management and collection handling.
+    Includes graceful error handling for different MCP clients (LM Studio, Claude Desktop, etc.)
     """
 
     def __init__(
@@ -39,27 +40,33 @@ class QdrantMCPServer(FastMCP):
         instructions: str | None = None,
         **settings: Any,
     ):
-        self.tool_settings = tool_settings
-        self.qdrant_settings = qdrant_settings
-        self.embedding_provider_settings = embedding_provider_settings
+        try:
+            self.tool_settings = tool_settings
+            self.qdrant_settings = qdrant_settings
+            self.embedding_provider_settings = embedding_provider_settings
 
-        # Initialize enhanced embedding model manager
-        self.embedding_manager = EnhancedEmbeddingModelManager(embedding_provider_settings)
+            # Initialize enhanced embedding model manager
+            self.embedding_manager = EnhancedEmbeddingModelManager(embedding_provider_settings)
 
-        # Use default embedding provider for initial setup
-        self.embedding_provider = create_embedding_provider(embedding_provider_settings)
+            # Use default embedding provider for initial setup
+            self.embedding_provider = create_embedding_provider(embedding_provider_settings)
 
-        # Initialize Qdrant connector with secure connection handling
-        self.qdrant_connector = self._create_secure_qdrant_connector()
+            # Initialize Qdrant connector with secure connection handling
+            self.qdrant_connector = self._create_secure_qdrant_connector()
 
-        # Set the connector in the embedding manager
-        self.embedding_manager.set_qdrant_connector(self.qdrant_connector)
+            # Set the connector in the embedding manager
+            self.embedding_manager.set_qdrant_connector(self.qdrant_connector)
 
-        super().__init__(name=name, instructions=instructions, **settings)
+            super().__init__(name=name, instructions=instructions, **settings)
 
-        self.setup_tools()
-        if self.qdrant_settings.enable_resources:
-            self.setup_resources()
+            self.setup_tools()
+            if self.qdrant_settings.enable_resources:
+                self.setup_resources()
+
+        except Exception as e:
+            logger.error(f"Failed to initialize MCP server: {e}")
+            # For MCP clients, we need to fail gracefully
+            raise RuntimeError(f"MCP server initialization failed: {e}") from e
 
     def _create_secure_qdrant_connector(self) -> QdrantConnector:
         """Create Qdrant connector with proper security handling."""
