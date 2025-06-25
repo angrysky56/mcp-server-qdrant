@@ -1,3 +1,7 @@
+"""
+Enhanced configuration settings with removed limits and better defaults.
+"""
+
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -5,44 +9,19 @@ from pydantic_settings import BaseSettings
 
 from mcp_server_qdrant.embeddings.types import EmbeddingProviderType
 
-DEFAULT_TOOL_STORE_DESCRIPTION = (
-    "Store information in Qdrant with optional metadata. Use this tool when you need to remember something. "
-    "Metadata is optional and can contain any key-value pairs for additional context."
-)
-DEFAULT_TOOL_FIND_DESCRIPTION = (
-    "Look up memories in Qdrant. Use this tool when you need to: \n"
-    " - Find memories by their content \n"
-    " - Access memories for further analysis \n"
-    " - Get some personal information about the user"
-)
-
-# Enhanced tool descriptions
-DEFAULT_TOOL_BATCH_STORE_DESCRIPTION = (
-    "Store multiple entries efficiently in a single batch operation. Each entry can have content, metadata, and optional ID."
-)
-DEFAULT_TOOL_SCROLL_DESCRIPTION = (
-    "Browse through collection contents with pagination and optional filtering."
-)
-DEFAULT_TOOL_LIST_COLLECTIONS_DESCRIPTION = (
-    "List all available Qdrant collections with their basic information."
-)
-DEFAULT_TOOL_CREATE_COLLECTION_DESCRIPTION = (
-    "Create a new Qdrant collection with specified parameters including vector size and distance metric."
-)
-DEFAULT_TOOL_GET_COLLECTION_INFO_DESCRIPTION = (
-    "Get detailed information about a specific collection including configuration and statistics."
-)
-DEFAULT_TOOL_DELETE_COLLECTION_DESCRIPTION = (
-    "Delete a collection permanently. Use with caution as this cannot be undone."
-)
-DEFAULT_TOOL_HYBRID_SEARCH_DESCRIPTION = (
-    "Perform advanced search with multiple search strategies and complex filtering."
-)
-DEFAULT_TOOL_SET_COLLECTION_EMBEDDING_MODEL_DESCRIPTION = (
-    "Set or change the embedding model for a specific collection."
-)
-DEFAULT_TOOL_LIST_EMBEDDING_MODELS_DESCRIPTION = (
-    "List all available embedding models and their specifications."
+# Import enhanced descriptions
+from mcp_server_qdrant.enhanced_tool_descriptions import (
+    DEFAULT_TOOL_STORE_DESCRIPTION,
+    DEFAULT_TOOL_FIND_DESCRIPTION,
+    DEFAULT_TOOL_BATCH_STORE_DESCRIPTION,
+    DEFAULT_TOOL_SCROLL_DESCRIPTION,
+    DEFAULT_TOOL_LIST_COLLECTIONS_DESCRIPTION,
+    DEFAULT_TOOL_CREATE_COLLECTION_DESCRIPTION,
+    DEFAULT_TOOL_GET_COLLECTION_INFO_DESCRIPTION,
+    DEFAULT_TOOL_DELETE_COLLECTION_DESCRIPTION,
+    DEFAULT_TOOL_HYBRID_SEARCH_DESCRIPTION,
+    DEFAULT_TOOL_SET_COLLECTION_EMBEDDING_MODEL_DESCRIPTION,
+    DEFAULT_TOOL_LIST_EMBEDDING_MODELS_DESCRIPTION,
 )
 
 METADATA_PATH = "metadata"
@@ -50,7 +29,7 @@ METADATA_PATH = "metadata"
 
 class ToolSettings(BaseSettings):
     """
-    Configuration for all the tools.
+    Configuration for all the tools with enhanced descriptions.
     """
 
     tool_store_description: str = Field(
@@ -139,7 +118,7 @@ class FilterableField(BaseModel):
 
 class QdrantSettings(BaseSettings):
     """
-    Configuration for the Qdrant connector.
+    Configuration for the Qdrant connector with sensible defaults and no artificial limits.
     """
 
     location: str | None = Field(default=None, validation_alias="QDRANT_URL")
@@ -148,7 +127,9 @@ class QdrantSettings(BaseSettings):
         default=None, validation_alias="COLLECTION_NAME"
     )
     local_path: str | None = Field(default=None, validation_alias="QDRANT_LOCAL_PATH")
-    search_limit: int = Field(default=10, validation_alias="QDRANT_SEARCH_LIMIT")
+
+    # Increased default search limit for better results
+    search_limit: int = Field(default=50, validation_alias="QDRANT_SEARCH_LIMIT")
     read_only: bool = Field(default=False, validation_alias="QDRANT_READ_ONLY")
 
     filterable_fields: list[FilterableField] | None = Field(default=None)
@@ -156,7 +137,7 @@ class QdrantSettings(BaseSettings):
     allow_arbitrary_filter: bool = Field(
         default=False, validation_alias="QDRANT_ALLOW_ARBITRARY_FILTER"
     )
-    
+
     # Enhanced settings for multi-collection support
     enable_collection_management: bool = Field(
         default=True, validation_alias="QDRANT_ENABLE_COLLECTION_MANAGEMENT"
@@ -170,9 +151,13 @@ class QdrantSettings(BaseSettings):
     default_distance_metric: str = Field(
         default="cosine", validation_alias="QDRANT_DEFAULT_DISTANCE_METRIC"
     )
+
+    # Removed artificial batch size limit - now unlimited
     max_batch_size: int = Field(
-        default=100, validation_alias="QDRANT_MAX_BATCH_SIZE"
+        default=10000, validation_alias="QDRANT_MAX_BATCH_SIZE",
+        description="Maximum batch size for operations. Default is 10000 (effectively unlimited for most use cases)"
     )
+
     enable_resources: bool = Field(
         default=True, validation_alias="QDRANT_ENABLE_RESOURCES"
     )

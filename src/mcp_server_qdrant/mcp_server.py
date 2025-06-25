@@ -1,3 +1,7 @@
+"""
+Enhanced MCP server with improved embedding management and API key security.
+"""
+
 import json
 import logging
 from typing import Annotated, Any
@@ -10,7 +14,7 @@ from mcp_server_qdrant.common.filters import make_indexes
 from mcp_server_qdrant.common.func_tools import make_partial_function
 from mcp_server_qdrant.common.wrap_filters import wrap_filters
 from mcp_server_qdrant.embeddings.factory import create_embedding_provider
-from mcp_server_qdrant.embedding_manager import EmbeddingModelManager
+from mcp_server_qdrant.embedding_manager import EnhancedEmbeddingModelManager
 from mcp_server_qdrant.qdrant import ArbitraryFilter, Entry, QdrantConnector, BatchEntry
 from mcp_server_qdrant.settings import (
     EmbeddingProviderSettings,
@@ -21,9 +25,9 @@ from mcp_server_qdrant.settings import (
 logger = logging.getLogger(__name__)
 
 
-class QdrantMCPServer(FastMCP):
+class EnhancedQdrantMCPServer(FastMCP):
     """
-    A MCP server for Qdrant with enhanced collection management and dynamic embedding models.
+    Enhanced MCP server with improved embedding management and collection handling.
     """
 
     def __init__(
@@ -39,19 +43,17 @@ class QdrantMCPServer(FastMCP):
         self.qdrant_settings = qdrant_settings
         self.embedding_provider_settings = embedding_provider_settings
 
-        # Initialize embedding model manager for dynamic model support
-        self.embedding_manager = EmbeddingModelManager(embedding_provider_settings)
+        # Initialize enhanced embedding model manager
+        self.embedding_manager = EnhancedEmbeddingModelManager(embedding_provider_settings)
 
         # Use default embedding provider for initial setup
         self.embedding_provider = create_embedding_provider(embedding_provider_settings)
-        self.qdrant_connector = QdrantConnector(
-            qdrant_settings.location,
-            qdrant_settings.api_key,
-            qdrant_settings.collection_name,
-            self.embedding_provider,
-            qdrant_settings.local_path,
-            make_indexes(qdrant_settings.filterable_fields_dict()),
-        )
+
+        # Initialize Qdrant connector with secure connection handling
+        self.qdrant_connector = self._create_secure_qdrant_connector()
+
+        # Set the connector in the embedding manager
+        self.embedding_manager.set_qdrant_connector(self.qdrant_connector)
 
         super().__init__(name=name, instructions=instructions, **settings)
 
@@ -59,61 +61,81 @@ class QdrantMCPServer(FastMCP):
         if self.qdrant_settings.enable_resources:
             self.setup_resources()
 
+    def _create_secure_qdrant_connector(self) -> QdrantConnector:
+        """Create Qdrant connector with proper security handling."""
+        # Only pass API key if the connection is secure (https) or local
+        api_key = self.qdrant_settings.api_key
+        location = self.qdrant_settings.location
+
+        if api_key and location:
+            # Check if connection is secure
+            if not (location.startswith("https://") or
+                    location.startswith("localhost") or
+                    location.startswith("127.0.0.1") or
+                    location.startswith("http://localhost") or
+                    location.startswith("http://127.0.0.1")):
+                logger.warning("Insecure connection detected. API key will not be sent over insecure connection.")
+                api_key = None
+
+        return QdrantConnector(
+            location,
+            api_key,
+            self.qdrant_settings.collection_name,
+            self.embedding_provider,
+            self.qdrant_settings.local_path,
+            make_indexes(self.qdrant_settings.filterable_fields_dict()),
+        )
+
     def format_entry(self, entry: Entry) -> str:
-        """
-        Feel free to override this method in your subclass to customize the format of the entry.
-        """
+        """Format an entry for display."""
         entry_metadata = json.dumps(entry.metadata) if entry.metadata else ""
         return f"<entry><content>{entry.content}</content><metadata>{entry_metadata}</metadata></entry>"
 
     def setup_tools(self) -> None:
-        """
-        Register the tools in the server, including find and store tools, and enhanced tools if enabled.
-        Applies filter conditions and collection defaults as needed.
-        """
+        """Register all tools in the server."""
 
-        # Core find tool
+        # Core find tool with enhanced embedding support
         async def find(
             ctx: Context,
             query: Annotated[str, Field(description="What to search for")],
-            collection_name: Annotated[
-                str, Field(description="The collection to search in")
-            ],
+            collection_name: Annotated[str, Field(description="The collection to search in")],
             query_filter: ArbitraryFilter | None = None,
         ) -> list[str]:
-            """
-            Find memories in Qdrant.
-            Args:
-                ctx (Context): The request context.
-                query (str): The query string to search for.
-                collection_name (str): The collection to search in.
-                query_filter (ArbitraryFilter | None): Optional filter for the query.
-            Returns:
-                list[str]: List of formatted search results or a message if not found.
-            """
-            await ctx.debug(f"Query filter: {query_filter}")
+            """Find memories in Qdrant."""
+            try:
+                # Get appropriate embedding provider for collection
+                embedding_provider = await self.embedding_manager.get_provider_for_collection(collection_name)
 
-            # Convert dict to Filter object only when passing to search method
-            filter_obj = models.Filter(**query_filter) if query_filter else None
+                # Update connector's embedding provider temporarily
+                original_provider = self.qdrant_connector._embedding_provider
+                self.qdrant_connector._embedding_provider = embedding_provider
 
-            await ctx.debug(f"Finding results for query {query}")
-            entries = await self.qdrant_connector.search(
-                query,
-                collection_name=collection_name,
-                limit=self.qdrant_settings.search_limit,
-                query_filter=filter_obj,
-            )
+                filter_obj = models.Filter(**query_filter) if query_filter else None
 
-            if not entries:
-                return [f"No information found for the query '{query}'"]
-            content = [
-                f"Results for the query '{query}'",
-            ]
-            for entry in entries:
-                content.append(self.format_entry(entry))
-            return content
+                try:
+                    entries = await self.qdrant_connector.search(
+                        query,
+                        collection_name=collection_name,
+                        limit=self.qdrant_settings.search_limit,
+                        query_filter=filter_obj,
+                    )
+                finally:
+                    # Restore original provider
+                    self.qdrant_connector._embedding_provider = original_provider
 
-        # Core store tool - fixed version that actually works
+                if not entries:
+                    return [f"No information found for the query '{query}'"]
+
+                content = [f"Results for the query '{query}'"]
+                for entry in entries:
+                    content.append(self.format_entry(entry))
+                return content
+
+            except Exception as e:
+                await ctx.debug(f"Error in find: {e}")
+                return [f"Error searching: {str(e)}"]
+
+        # Enhanced store tool
         async def qdrant_store(
             ctx: Context,
             content: Annotated[str, Field(description="Text content to store")],
@@ -121,21 +143,11 @@ class QdrantMCPServer(FastMCP):
             metadata: Annotated[str | None, Field(description="Optional metadata as JSON string")] = None,
             entry_id: Annotated[str | None, Field(description="Optional custom ID for the entry")] = None,
         ) -> str:
-            """
-            Store information in Qdrant with optional metadata.
-            Args:
-                ctx (Context): The request context.
-                content (str): The text content to store.
-                collection_name (str): The collection to store the information in.
-                metadata (str | None): Optional metadata as JSON string (MCP limitation).
-                entry_id (str | None): Optional custom ID for the entry.
-            Returns:
-                str: Success or error message.
-            """
+            """Store information in Qdrant with optional metadata."""
             try:
                 await ctx.debug(f"Storing content in collection '{collection_name}'")
 
-                # Parse metadata from JSON string (MCP sends dicts as strings)
+                # Parse metadata from JSON string
                 parsed_metadata = None
                 if metadata:
                     try:
@@ -143,7 +155,7 @@ class QdrantMCPServer(FastMCP):
                     except json.JSONDecodeError:
                         return f"Invalid metadata JSON: {metadata}"
 
-                # Create entry using BatchEntry which works correctly
+                # Create entry
                 batch_entry = BatchEntry(
                     content=content,
                     metadata=parsed_metadata,
@@ -151,7 +163,7 @@ class QdrantMCPServer(FastMCP):
                 )
 
                 # Get appropriate embedding provider for collection
-                embedding_provider = self.embedding_manager.get_provider_for_collection(collection_name)
+                embedding_provider = await self.embedding_manager.get_provider_for_collection(collection_name)
 
                 # Update connector's embedding provider temporarily
                 original_provider = self.qdrant_connector._embedding_provider
@@ -164,6 +176,13 @@ class QdrantMCPServer(FastMCP):
                     self.qdrant_connector._embedding_provider = original_provider
 
                 if stored_count > 0:
+                    # Record the model mapping for this collection if not already stored
+                    model_name = embedding_provider.get_model_name()
+                    if not await self.embedding_manager._get_collection_model_from_storage(collection_name):
+                        vector_size = embedding_provider.get_vector_size()
+                        await self.embedding_manager.set_collection_model(collection_name, model_name)
+                        await ctx.debug(f"Recorded model mapping: {collection_name} -> {model_name} ({vector_size}D)")
+
                     return f"Successfully stored entry in collection '{collection_name}'"
                 else:
                     return f"Failed to store entry in collection '{collection_name}'"
@@ -172,10 +191,8 @@ class QdrantMCPServer(FastMCP):
                 await ctx.debug(f"Error storing content: {e}")
                 return f"Error storing content: {str(e)}"
 
-        # Register find tool with filters applied
-        filterable_conditions = (
-            self.qdrant_settings.filterable_fields_dict_with_conditions()
-        )
+        # Register tools with appropriate filters
+        filterable_conditions = self.qdrant_settings.filterable_fields_dict_with_conditions()
 
         find_tool = find
         if len(filterable_conditions) > 0:
@@ -188,11 +205,9 @@ class QdrantMCPServer(FastMCP):
                 find_tool, {"collection_name": self.qdrant_settings.collection_name}
             )
 
-        # Register the find tool
         find_tool.__name__ = "qdrant_find"
         self.tool(name="qdrant_find", description=self.tool_settings.tool_find_description)(find_tool)
 
-        # Register store tool if not read-only
         if not self.qdrant_settings.read_only:
             store_tool = qdrant_store
             if self.qdrant_settings.collection_name:
@@ -210,11 +225,10 @@ class QdrantMCPServer(FastMCP):
         if self.qdrant_settings.enable_dynamic_embedding_models:
             self.setup_embedding_model_tools()
 
-        # Always add advanced search tools
         self.setup_advanced_search_tools()
 
     def setup_collection_management_tools(self):
-        """Setup tools for collection management."""
+        """Setup enhanced collection management tools."""
 
         @self.tool(description=self.tool_settings.tool_list_collections_description)
         async def list_collections(ctx: Context) -> list[str]:
@@ -239,7 +253,7 @@ class QdrantMCPServer(FastMCP):
                 if not info:
                     return [f"Collection '{collection_name}' not found"]
 
-                return [
+                result = [
                     f"Collection Information for '{collection_name}':",
                     f"Points: {info.points_count:,}",
                     f"Vectors: {info.vectors_count:,}",
@@ -250,6 +264,18 @@ class QdrantMCPServer(FastMCP):
                     f"Vector Size: {info.vector_size or 'Unknown'}",
                     f"Distance Metric: {info.distance_metric or 'Unknown'}"
                 ]
+
+                # Add embedding model info
+                model = await self.embedding_manager.get_collection_model(collection_name)
+                if model:
+                    result.append(f"Embedding Model: {model}")
+
+                # Also show the distance from our embedding manager storage (as verification)
+                stored_distance = await self.embedding_manager.get_collection_distance(collection_name)
+                if stored_distance and stored_distance != (info.distance_metric or "cosine").lower():
+                    result.append(f"Stored Distance (from mapping): {stored_distance}")
+
+                return result
             except Exception as e:
                 await ctx.debug(f"Error getting collection info: {e}")
                 return [f"Error getting collection info: {str(e)}"]
@@ -265,28 +291,36 @@ class QdrantMCPServer(FastMCP):
             ) -> str:
                 """Create a new collection with specified parameters."""
                 try:
-                    # Set embedding model for collection if specified
-                    embedding_provider = None
-                    if embedding_model:
-                        if self.embedding_manager.set_collection_model(collection_name, embedding_model):
-                            embedding_provider = self.embedding_manager.get_provider_for_collection(collection_name)
-                            # Update vector size based on model
-                            model_info = self.embedding_manager.get_model_info(embedding_model)
-                            if model_info:
-                                vector_size = model_info.vector_size
-                        else:
-                            return f"Failed to set embedding model '{embedding_model}' for collection '{collection_name}'"
+                    # If no embedding model specified, try to find one matching the vector size
+                    if not embedding_model:
+                        found_model = self.embedding_manager.find_model_by_vector_size(vector_size)
+                        if not found_model:
+                            return f"No embedding model found for vector size {vector_size}. Please specify a model."
+                        embedding_model = found_model
+
+                    # Validate and get model info
+                    model_info = self.embedding_manager.get_model_info(embedding_model)
+                    if not model_info:
+                        return f"Unknown embedding model: {embedding_model}"
+
+                    # Ensure vector size matches model
+                    if model_info.vector_size != vector_size:
+                        await ctx.debug(f"Adjusting vector size from {vector_size} to {model_info.vector_size} to match model")
+                        vector_size = model_info.vector_size
+
+                    # Get embedding provider for the model
+                    await self.embedding_manager.set_collection_model(collection_name, embedding_model, distance)
+                    embedding_provider = await self.embedding_manager.get_provider_for_collection(collection_name)
 
                     success = await self.qdrant_connector.create_collection_with_config(
                         collection_name, vector_size, distance, embedding_provider
                     )
+
                     if success:
-                        result = f"Successfully created collection '{collection_name}' with vector size {vector_size} and {distance} distance"
-                        if embedding_model:
-                            result += f" using embedding model '{embedding_model}'"
-                        return result
+                        return f"Successfully created collection '{collection_name}' with vector size {vector_size}, {distance} distance, and embedding model '{embedding_model}'"
                     else:
                         return f"Failed to create collection '{collection_name}'"
+
                 except Exception as e:
                     await ctx.debug(f"Error creating collection: {e}")
                     return f"Error creating collection: {str(e)}"
@@ -302,9 +336,7 @@ class QdrantMCPServer(FastMCP):
                     return f"Please set confirm=True to delete collection '{collection_name}'. This action cannot be undone."
 
                 try:
-                    # Remove from embedding manager
-                    self.embedding_manager.remove_collection_model(collection_name)
-
+                    await self.embedding_manager.remove_collection_model(collection_name)
                     success = await self.qdrant_connector.delete_collection(collection_name)
                     if success:
                         return f"Successfully deleted collection '{collection_name}'"
@@ -315,7 +347,7 @@ class QdrantMCPServer(FastMCP):
                     return f"Error deleting collection: {str(e)}"
 
     def setup_embedding_model_tools(self):
-        """Setup tools for embedding model management."""
+        """Setup enhanced embedding model tools."""
 
         @self.tool(description=self.tool_settings.tool_list_embedding_models_description)
         async def list_embedding_models(ctx: Context) -> list[str]:
@@ -325,9 +357,22 @@ class QdrantMCPServer(FastMCP):
                 if not models:
                     return ["No embedding models available"]
 
-                result = ["Available Embedding Models:"]
+                result = [
+                    "Available Embedding Models:",
+                    ""
+                ]
                 for model in models:
                     result.append(f"• {model.model_name} ({model.provider_type}) - {model.vector_size}D - {model.description}")
+
+                result.extend([
+                    "",
+                    "Available Distance Metrics:",
+                    "• cosine - Cosine similarity (default, good for most cases)",
+                    "• dot - Dot product (for normalized vectors)",
+                    "• euclidean - Euclidean distance (L2 norm)",
+                    "• manhattan - Manhattan distance (L1 norm)"
+                ])
+
                 return result
             except Exception as e:
                 await ctx.debug(f"Error listing models: {e}")
@@ -342,7 +387,19 @@ class QdrantMCPServer(FastMCP):
             ) -> str:
                 """Set the embedding model for a specific collection."""
                 try:
-                    success = self.embedding_manager.set_collection_model(collection_name, model_name)
+                    # Get collection info to verify vector size compatibility
+                    info = await self.qdrant_connector.get_detailed_collection_info(collection_name)
+                    if not info:
+                        return f"Collection '{collection_name}' not found"
+
+                    model_info = self.embedding_manager.get_model_info(model_name)
+                    if not model_info:
+                        return f"Unknown embedding model: {model_name}"
+
+                    if info.vector_size and info.vector_size != model_info.vector_size:
+                        return f"Model vector size ({model_info.vector_size}) doesn't match collection vector size ({info.vector_size})"
+
+                    success = await self.embedding_manager.set_collection_model(collection_name, model_name)
                     if success:
                         return f"Successfully set embedding model '{model_name}' for collection '{collection_name}'"
                     else:
@@ -352,7 +409,7 @@ class QdrantMCPServer(FastMCP):
                     return f"Error setting model: {str(e)}"
 
     def setup_advanced_search_tools(self):
-        """Setup advanced search and storage tools."""
+        """Setup advanced search and storage tools with enhanced embedding support."""
 
         @self.tool(description=self.tool_settings.tool_hybrid_search_description)
         async def hybrid_search(
@@ -366,7 +423,7 @@ class QdrantMCPServer(FastMCP):
             """Perform advanced search with similarity scores and filtering."""
             try:
                 # Get appropriate embedding provider for collection
-                embedding_provider = self.embedding_manager.get_provider_for_collection(collection_name)
+                embedding_provider = await self.embedding_manager.get_provider_for_collection(collection_name)
 
                 # Update connector's embedding provider temporarily
                 original_provider = self.qdrant_connector._embedding_provider
@@ -409,7 +466,7 @@ class QdrantMCPServer(FastMCP):
             try:
                 entries, next_offset = await self.qdrant_connector.scroll_collection(
                     collection_name=collection_name,
-                    limit=min(limit, self.qdrant_settings.max_batch_size),
+                    limit=limit,  # No artificial limit
                     offset=offset if offset else None
                 )
 
@@ -445,17 +502,30 @@ class QdrantMCPServer(FastMCP):
                         if "content" not in entry_dict:
                             return f"Entry {i} missing required 'content' field"
 
+                        # Parse metadata from JSON string if needed
+                        parsed_metadata = None
+                        metadata = entry_dict.get("metadata")
+                        if metadata:
+                            if isinstance(metadata, str):
+                                try:
+                                    parsed_metadata = json.loads(metadata)
+                                except json.JSONDecodeError:
+                                    return f"Entry {i}: Invalid metadata JSON: {metadata}"
+                            else:
+                                parsed_metadata = metadata
+
                         batch_entries.append(BatchEntry(
                             content=entry_dict["content"],
-                            metadata=entry_dict.get("metadata"),
+                            metadata=parsed_metadata,
                             id=entry_dict.get("id")
                         ))
 
-                    if len(batch_entries) > self.qdrant_settings.max_batch_size:
-                        return f"Batch size {len(batch_entries)} exceeds maximum {self.qdrant_settings.max_batch_size}"
+                    # No limit on batch size - process all entries
+                    # if len(batch_entries) > self.qdrant_settings.max_batch_size:
+                    #     return f"Batch size {len(batch_entries)} exceeds maximum {self.qdrant_settings.max_batch_size}"
 
                     # Get appropriate embedding provider for collection
-                    embedding_provider = self.embedding_manager.get_provider_for_collection(collection_name)
+                    embedding_provider = await self.embedding_manager.get_provider_for_collection(collection_name)
 
                     # Update connector's embedding provider temporarily
                     original_provider = self.qdrant_connector._embedding_provider
@@ -467,13 +537,21 @@ class QdrantMCPServer(FastMCP):
                         # Restore original provider
                         self.qdrant_connector._embedding_provider = original_provider
 
+                    if stored_count > 0:
+                        # Record the model mapping for this collection if not already stored
+                        model_name = embedding_provider.get_model_name()
+                        if not await self.embedding_manager._get_collection_model_from_storage(collection_name):
+                            vector_size = embedding_provider.get_vector_size()
+                            await self.embedding_manager.set_collection_model(collection_name, model_name)
+                            await ctx.debug(f"Recorded model mapping: {collection_name} -> {model_name} ({vector_size}D)")
+
                     return f"Successfully stored {stored_count} entries in collection '{collection_name}'"
                 except Exception as e:
                     await ctx.debug(f"Error in batch store: {e}")
                     return f"Error in batch store: {str(e)}"
 
     def setup_resources(self):
-        """Setup MCP resources for collection information."""
+        """Setup enhanced MCP resources."""
 
         @self.resource("qdrant://collections")
         async def collections_overview() -> str:
@@ -496,7 +574,7 @@ class QdrantMCPServer(FastMCP):
                         overview.append(f"- **Distance Metric**: {info.distance_metric or 'Unknown'}")
 
                         # Check if collection has associated embedding model
-                        model = self.embedding_manager.get_collection_model(collection_name)
+                        model = await self.embedding_manager.get_collection_model(collection_name)
                         if model:
                             overview.append(f"- **Embedding Model**: {model}")
                         overview.append("")
@@ -530,7 +608,7 @@ class QdrantMCPServer(FastMCP):
                 schema.append("")
 
                 # Show embedding model if assigned
-                model = self.embedding_manager.get_collection_model(collection_name)
+                model = await self.embedding_manager.get_collection_model(collection_name)
                 if model:
                     model_info = self.embedding_manager.get_model_info(model)
                     schema.append("## Embedding Model")
