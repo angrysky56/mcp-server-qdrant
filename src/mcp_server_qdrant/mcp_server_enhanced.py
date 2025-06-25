@@ -185,6 +185,13 @@ class EnhancedQdrantMCPServer(FastMCP):
                     self.qdrant_connector._embedding_provider = original_provider
 
                 if stored_count > 0:
+                    # Record the model mapping for this collection if not already stored
+                    model_name = embedding_provider.get_model_name()
+                    if not await self.embedding_manager._get_collection_model_from_storage(collection_name):
+                        vector_size = embedding_provider.get_vector_size()
+                        await self.embedding_manager.set_collection_model(collection_name, model_name)
+                        await ctx.debug(f"Recorded model mapping: {collection_name} -> {model_name} ({vector_size}D)")
+                    
                     return f"Successfully stored entry in collection '{collection_name}'"
                 else:
                     return f"Failed to store entry in collection '{collection_name}'"
@@ -521,6 +528,14 @@ class EnhancedQdrantMCPServer(FastMCP):
                     finally:
                         # Restore original provider
                         self.qdrant_connector._embedding_provider = original_provider
+
+                    if stored_count > 0:
+                        # Record the model mapping for this collection if not already stored
+                        model_name = embedding_provider.get_model_name()
+                        if not await self.embedding_manager._get_collection_model_from_storage(collection_name):
+                            vector_size = embedding_provider.get_vector_size()
+                            await self.embedding_manager.set_collection_model(collection_name, model_name)
+                            await ctx.debug(f"Recorded model mapping: {collection_name} -> {model_name} ({vector_size}D)")
 
                     return f"Successfully stored {stored_count} entries in collection '{collection_name}'"
                 except Exception as e:

@@ -11,15 +11,9 @@
       "env": {
         "QDRANT_URL": "http://localhost:6333",
         "QDRANT_API_KEY": "",
-        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
         "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
         "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
-        "QDRANT_ENABLE_RESOURCES": "true",
-        "QDRANT_DEFAULT_VECTOR_SIZE": "384",
-        "QDRANT_DEFAULT_DISTANCE_METRIC": "cosine",
-        "QDRANT_MAX_BATCH_SIZE": "10000",
-        "QDRANT_SEARCH_LIMIT": "1000",
-        "FASTMCP_LOG_LEVEL": "INFO"
+        "QDRANT_ENABLE_RESOURCES": "true"
       }
     }
   }

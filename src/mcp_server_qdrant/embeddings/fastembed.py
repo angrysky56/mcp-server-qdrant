@@ -48,3 +48,7 @@ class FastEmbedProvider(EmbeddingProvider):
             self.embedding_model._get_model_description(self.model_name)
         )
         return model_description.dim
+
+    def get_model_name(self) -> str:
+        """Get the name of the embedding model."""
+        return self.model_name

@@ -84,16 +84,28 @@ The server now supports 12+ embedding models with automatic model management:
 - `thenlper/gte-large` - Large general embeddings
 - `intfloat/e5-large-v2` - E5 family, highest quality
 
-**For the enhanced version with 13 tools and advanced features, use the manual configuration below.**
+**For the enhanced version with 13 tools and advanced features, use the configuration below.**
+
+## How Automatic Model Selection Works
+
+The enhanced server features **intelligent automatic model selection**:
+
+1. **First Use**: When you first store data in a collection, the server uses a default embedding model
+2. **Model Recording**: The server automatically records which model was used for that collection  
+3. **Consistency**: All future operations on that collection use the same exact model
+4. **Per-Collection**: Each collection can use a different model based on its specific needs
+5. **No Configuration**: No need to manually specify embedding models in your config
+
+This ensures **perfect consistency** - each collection always uses the same embedding model it was created with, preventing dimension mismatches and maintaining semantic coherence.
 
 ### Quick start for MCP Server Clients i.e. Claude Desktop
 
-#### Enhanced Multi-Collection Mode= Simply add to the claude_desktop_config.json (Recommended)
-### Manual configuration
+#### Enhanced Multi-Collection Mode (Recommended)
+Simply add to your claude_desktop_config.json:
 
 ```json
 {
-  "mcp-server-qdrant": {
+  "mcp-server-qdrant-enhanced": {
     "command": "uv",
     "args": [
       "--directory",
@@ -104,20 +116,16 @@ The server now supports 12+ embedding models with automatic model management:
     "env": {
       "QDRANT_URL": "http://localhost:6333",
       "QDRANT_API_KEY": "",
-      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
       "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
       "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
-      "QDRANT_ENABLE_RESOURCES": "true",
-      "QDRANT_DEFAULT_VECTOR_SIZE": "384",
-      "QDRANT_DEFAULT_DISTANCE_METRIC": "cosine",
-      "QDRANT_MAX_BATCH_SIZE": "100"
+      "QDRANT_ENABLE_RESOURCES": "true"
     }
   }
 }
 ```
 
 > [!NOTE]
-> No `COLLECTION_NAME` is set in enhanced mode, enabling multi-collection support. Collections will be created dynamically as needed.
+> **Automatic Model Selection**: No `EMBEDDING_MODEL` needed! The server automatically selects and remembers the appropriate embedding model for each collection. When you first store data in a collection, the server will use a default model and remember that choice for all future operations on that collection.
 
 > Potential issue if security is a concern i.e. not using locally:
 
@@ -134,10 +142,12 @@ The configuration of the server is done using environment variables:
 |--------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------|
 | `QDRANT_URL`             | URL of the Qdrant server                                            | None                                                              |
 | `QDRANT_API_KEY`         | API key for the Qdrant server                                       | None                                                              |
-| `COLLECTION_NAME`        | Name of the default collection to use                               | None                                                              |
+| `COLLECTION_NAME`        | Name of the default collection to use (optional for multi-collection mode) | None                                                              |
 | `QDRANT_LOCAL_PATH`      | Path to the local Qdrant database (alternative to `QDRANT_URL`)     | None                                                              |
 | `EMBEDDING_PROVIDER`     | Embedding provider to use (currently only "fastembed" is supported) | `fastembed`                                                       |
-| `EMBEDDING_MODEL`        | Name of the default embedding model to use                          | `sentence-transformers/all-MiniLM-L6-v2`                          |
+
+> [!NOTE]
+> **Automatic Model Selection**: `EMBEDDING_MODEL` is no longer required. The system automatically selects appropriate models and remembers them per collection.
 
 ### Enhanced Features Configuration
 | Name                                        | Description                                                  | Default Value |
@@ -145,8 +155,6 @@ The configuration of the server is done using environment variables:
 | `QDRANT_ENABLE_COLLECTION_MANAGEMENT`      | Enable collection management tools                           | `true`        |
 | `QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS`   | Enable dynamic embedding model assignment per collection     | `true`        |
 | `QDRANT_ENABLE_RESOURCES`                  | Enable MCP resources for collection information             | `true`        |
-| `QDRANT_DEFAULT_VECTOR_SIZE`               | Default vector size for new collections                     | `384`         |
-| `QDRANT_DEFAULT_DISTANCE_METRIC`           | Default distance metric (cosine, dot, euclidean, manhattan) | `cosine`      |
 | `QDRANT_MAX_BATCH_SIZE`                    | Maximum number of entries per batch operation               | `100`         |
 | `QDRANT_SEARCH_LIMIT`                      | Default maximum search results                               | `10`          |
 | `QDRANT_READ_ONLY`                         | Enable read-only mode (disables write operations)           | `false`       |
@@ -226,18 +234,17 @@ collections = await list_collections()
 await create_collection(
     collection_name="code_snippets",
     vector_size=768,
-    distance="cosine",
-    embedding_model="sentence-transformers/all-mpnet-base-v2"
+    distance="cosine"
 )
 
-# Create another collection for documentation
+# Create another collection for documentation  
 await create_collection(
     collection_name="documentation",
-    vector_size=384,
-    embedding_model="BAAI/bge-small-en-v1.5"
+    vector_size=384
 )
 
 # Store data in different collections
+# The system automatically selects and remembers appropriate embedding models
 await store("Python function for sorting", "code_snippets")
 await store("API documentation for REST endpoints", "documentation")
 ```
@@ -273,8 +280,11 @@ info = await get_collection_info("code_snippets")
 # Browse collection contents
 await scroll_collection("code_snippets", limit=10)
 
-# Set embedding model for existing collection
-await set_collection_embedding_model("legacy_data", "intfloat/e5-base-v2")
+# View available embedding models
+await list_embedding_models()
+
+# Check which model a collection is using
+# The system automatically tracks this information
 ```
 
 > [!IMPORTANT]
@@ -378,8 +388,7 @@ For compatibility with existing setups using a single default collection:
     "env": {
       "QDRANT_URL": "https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
       "QDRANT_API_KEY": "your_api_key",
-      "COLLECTION_NAME": "your-collection-name",
-      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      "COLLECTION_NAME": "your-collection-name"
     }
   }
 }
@@ -400,7 +409,6 @@ For local development with enhanced features:
     ],
     "env": {
       "QDRANT_LOCAL_PATH": "/tmp/qdrant_storage",
-      "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
       "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
       "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
       "QDRANT_ENABLE_RESOURCES": "true"
@@ -409,10 +417,7 @@ For local development with enhanced features:
 }
 ```
 
-This MCP server will automatically create a collection with the specified name if it doesn't exist.
-
-By default, the server will use the `sentence-transformers/all-MiniLM-L6-v2` embedding model to encode memories.
-For the time being, only [FastEmbed](https://qdrant.github.io/fastembed/) models are supported.
+This MCP server will automatically create collections and select appropriate embedding models as needed.
 
 ## Support for other tools
 
