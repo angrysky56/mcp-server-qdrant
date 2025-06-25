@@ -94,8 +94,22 @@ class QdrantConnector:
         # it should unlock usage of server-side inference.
         embeddings = await self._embedding_provider.embed_documents([entry.content])
 
+        # Get collection info to determine the correct vector name
+        collection_info = await self._client.get_collection(collection_name)
+
+        # Find the first vector configuration name (there should be only one for our collections)
+        vector_name = None
+        if hasattr(collection_info, 'config') and collection_info.config and hasattr(collection_info.config, 'params'):
+            if hasattr(collection_info.config.params, 'vectors'):
+                vectors_config = collection_info.config.params.vectors
+                if isinstance(vectors_config, dict) and vectors_config:
+                    vector_name = list(vectors_config.keys())[0]  # Get the first vector name
+
+        # Fallback to provider's vector name if we can't determine from collection
+        if not vector_name:
+            vector_name = self._embedding_provider.get_vector_name()
+
         # Add to Qdrant
-        vector_name = self._embedding_provider.get_vector_name()
         payload = {"document": entry.content, METADATA_PATH: entry.metadata}
         await self._client.upsert(
             collection_name=collection_name,
@@ -137,7 +151,21 @@ class QdrantConnector:
         # it should unlock usage of server-side inference.
 
         query_vector = await self._embedding_provider.embed_query(query)
-        vector_name = self._embedding_provider.get_vector_name()
+
+        # Get collection info to determine the correct vector name
+        collection_info = await self._client.get_collection(collection_name)
+
+        # Find the first vector configuration name (there should be only one for our collections)
+        vector_name = None
+        if hasattr(collection_info, 'config') and collection_info.config and hasattr(collection_info.config, 'params'):
+            if hasattr(collection_info.config.params, 'vectors'):
+                vectors_config = collection_info.config.params.vectors
+                if isinstance(vectors_config, dict) and vectors_config:
+                    vector_name = list(vectors_config.keys())[0]  # Get the first vector name
+
+        # Fallback to provider's vector name if we can't determine from collection
+        if not vector_name:
+            vector_name = self._embedding_provider.get_vector_name()
 
         # Search in Qdrant
         search_results = await self._client.query_points(
@@ -222,11 +250,21 @@ class QdrantConnector:
                         if hasattr(vectors_config, 'distance'):
                             distance_metric = vectors_config.distance.name if hasattr(vectors_config.distance, 'name') else str(vectors_config.distance)
 
+            # For small collections, Qdrant doesn't report vectors_count but points_count indicates stored vectors
+            points_count = getattr(info, 'points_count', 0) or 0
+            indexed_vectors_count = getattr(info, 'indexed_vectors_count', 0) or 0
+
+            # If indexed_vectors_count is 0 but we have points, assume vectors are stored but not indexed
+            # This happens for collections below the indexing threshold
+            vectors_count = getattr(info, 'vectors_count', None)
+            if vectors_count is None:
+                vectors_count = points_count  # Assume each point has a vector for collections below indexing threshold
+
             return CollectionInfo(
                 name=collection_name,
-                vectors_count=getattr(info, 'vectors_count', 0) or 0,
-                indexed_vectors_count=getattr(info, 'indexed_vectors_count', 0) or 0,
-                points_count=getattr(info, 'points_count', 0) or 0,
+                vectors_count=vectors_count,
+                indexed_vectors_count=indexed_vectors_count,
+                points_count=points_count,
                 segments_count=getattr(info, 'segments_count', 0) or 0,
                 status=getattr(info, 'status', 'unknown') or 'unknown',
                 optimizer_status=getattr(info, 'optimizer_status', 'unknown') or 'unknown',
@@ -319,9 +357,23 @@ class QdrantConnector:
             documents = [entry.content for entry in entries]
             embeddings = await self._embedding_provider.embed_documents(documents)
 
+            # Get collection info to determine the correct vector name
+            collection_info = await self._client.get_collection(collection_name)
+
+            # Find the first vector configuration name (there should be only one for our collections)
+            vector_name = None
+            if hasattr(collection_info, 'config') and collection_info.config and hasattr(collection_info.config, 'params'):
+                if hasattr(collection_info.config.params, 'vectors'):
+                    vectors_config = collection_info.config.params.vectors
+                    if isinstance(vectors_config, dict) and vectors_config:
+                        vector_name = list(vectors_config.keys())[0]  # Get the first vector name
+
+            # Fallback to provider's vector name if we can't determine from collection
+            if not vector_name:
+                vector_name = self._embedding_provider.get_vector_name()
+
             # Prepare points for batch upload
             points = []
-            vector_name = self._embedding_provider.get_vector_name()
 
             for i, (entry, embedding) in enumerate(zip(entries, embeddings)):
                 point_id = entry.id or uuid.uuid4().hex

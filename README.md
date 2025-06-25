@@ -1,15 +1,25 @@
-# mcp-server-qdrant-enhanced: A Qdrant MCP server
+# mcp-server-qdrant-enhanced: A Qdrant MCP Server
 
 ![alt text](image.png)
 
 ## Overview
 
-A Model Context Protocol server for keeping and retrieving memories in the Qdrant vector search engine.
-It acts as a semantic memory layer on top of the Qdrant database.
+A Model Context Protocol server for storing and retrieving semantic memories using the Qdrant vector search engine.
+It provides intelligent semantic memory with automatic embedding model management and multiple deployment modes.
+
+## ✨ Key Features
+
+- 🤖 **Automatic Model Selection** - No manual embedding model configuration needed
+- 🔄 **Per-Collection Model Memory** - Each collection remembers its embedding model
+- 🐳 **Multiple Deployment Modes** - Memory, local file, auto-managed Docker, or external
+- 📊 **Advanced Search** - Hybrid search with similarity scores and filtering
+- 🛠️ **Collection Management** - Create, configure, and manage collections
+- 🎯 **Distance Metric Support** - Cosine, dot product, Euclidean, and Manhattan
+- 📈 **Batch Operations** - Efficient bulk storage and retrieval
 
 ## Components
 
-### Enhanced Tools (13 Total)
+### Tools (13 Total)
 
 #### Core Storage & Search
 1. **`qdrant-store`** - Store information in Qdrant database
@@ -84,54 +94,69 @@ The server now supports 12+ embedding models with automatic model management:
 - `thenlper/gte-large` - Large general embeddings
 - `intfloat/e5-large-v2` - E5 family, highest quality
 
-**For the enhanced version with 13 tools and advanced features, use the configuration below.**
+**For advanced features with 13 tools and intelligent model management, use the configuration below.**
 
-## How Automatic Model Selection Works
+## 🚀 Quick Start
 
-The enhanced server features **intelligent automatic model selection**:
+### Deployment Modes
 
-1. **First Use**: When you first store data in a collection, the server uses a default embedding model
-2. **Model Recording**: The server automatically records which model was used for that collection  
-3. **Consistency**: All future operations on that collection use the same exact model
-4. **Per-Collection**: Each collection can use a different model based on its specific needs
-5. **No Configuration**: No need to manually specify embedding models in your config
+Choose the deployment mode that best fits your needs:
 
-This ensures **perfect consistency** - each collection always uses the same embedding model it was created with, preventing dimension mismatches and maintaining semantic coherence.
+#### 🧠 Memory Mode (Fastest)
+Perfect for testing and development:
+```bash
+export QDRANT_MODE=memory
+uv run mcp-server-qdrant --transport sse
+```
 
-### Quick start for MCP Server Clients i.e. Claude Desktop
+#### 💾 Local File Mode (Persistent)
+Data persists between restarts:
+```bash
+export QDRANT_MODE=local
+uv run mcp-server-qdrant --transport sse
+```
 
-#### Enhanced Multi-Collection Mode (Recommended)
-Simply add to your claude_desktop_config.json:
+#### 🐳 Auto-Managed Docker (Recommended)
+Full Qdrant features with automatic setup:
+```bash
+export QDRANT_MODE=docker
+export QDRANT_AUTO_DOCKER=true
+uv run mcp-server-qdrant --transport sse
+```
+
+#### 🌐 External Qdrant (Production)
+Connect to existing Qdrant instance:
+```bash
+export QDRANT_URL=http://your-qdrant-server:6333
+uv run mcp-server-qdrant --transport sse
+```
+
+### Claude Desktop Configuration
+
+Add to your `claude_desktop_config.json`:
 
 ```json
 {
-  "mcp-server-qdrant-enhanced": {
-    "command": "uv",
-    "args": [
-      "--directory",
-      "/path/to/your/mcp-server-qdrant/src",
-      "run",
-      "mcp-server-qdrant"
-    ],
-    "env": {
-      "QDRANT_URL": "http://localhost:6333",
-      "QDRANT_API_KEY": "",
-      "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
-      "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
-      "QDRANT_ENABLE_RESOURCES": "true"
+  "mcpServers": {
+    "mcp-server-qdrant": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/your/mcp-server-qdrant/src",
+        "run",
+        "mcp-server-qdrant"
+      ],
+      "env": {
+        "QDRANT_MODE": "docker",
+        "QDRANT_AUTO_DOCKER": "true",
+        "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
+        "QDRANT_ENABLE_RESOURCES": "true"
+      }
     }
   }
 }
 ```
-
-> [!NOTE]
-> **Automatic Model Selection**: No `EMBEDDING_MODEL` needed! The server automatically selects and remembers the appropriate embedding model for each collection. When you first store data in a collection, the server will use a default model and remember that choice for all future operations on that collection.
-
-> Potential issue if security is a concern i.e. not using locally:
-
-/mcp-server-qdrant/src/mcp_server_qdrant/qdrant.py:68: UserWarning: Api key is used with an insecure connection.
-  self._client = AsyncQdrantClient(
-[06/20/25 17:02:02] INFO     Starting MCP server 'mcp-server-qdrant' with transport 'stdio'
 
 ## Environment Variables
 
@@ -237,7 +262,7 @@ await create_collection(
     distance="cosine"
 )
 
-# Create another collection for documentation  
+# Create another collection for documentation
 await create_collection(
     collection_name="documentation",
     vector_size=384
@@ -721,3 +746,26 @@ Once started, open your browser to http://localhost:5173 to access the inspector
 This MCP server is licensed under the Apache License 2.0. This means you are free to use, modify, and distribute the
 software, subject to the terms and conditions of the Apache License 2.0. For more details, please see the LICENSE file
 in the project repository.
+
+## 🤖 How Automatic Model Selection Works
+
+The server features **intelligent automatic model selection**:
+
+1. **First Use**: When you first store data in a collection, the server uses a default embedding model
+2. **Model Recording**: The server automatically records which model was used for that collection
+3. **Consistency**: All future operations on that collection use the same exact model
+4. **Per-Collection**: Each collection can use a different model based on its specific needs
+5. **Distance Tracking**: Each collection also remembers its distance metric (cosine, dot, euclidean, manhattan)
+6. **No Configuration**: No need to manually specify embedding models in your config
+
+This ensures **perfect consistency** - each collection always uses the same embedding model it was created with, preventing dimension mismatches and maintaining semantic coherence.
+
+### Auto-Managed Docker Features
+
+When using `QDRANT_MODE=docker` with `QDRANT_AUTO_DOCKER=true`:
+
+- 🔍 **Smart Container Detection** - Checks if Qdrant container already exists
+- 🔄 **Port Conflict Resolution** - Automatically finds available ports
+- 💾 **Data Persistence** - Mounts `./qdrant_data` for persistent storage
+- 🧹 **Graceful Cleanup** - Stops container when server exits
+- ⚡ **Health Checking** - Waits for Qdrant API to be ready before proceeding

@@ -1,4 +1,4 @@
-from mcp_server_qdrant.mcp_server import EnhancedQdrantMCPServer
+from mcp_server_qdrant.mcp_server import QdrantMCPServer
 from mcp_server_qdrant.settings import (
     EmbeddingProviderSettings,
     QdrantSettings,
@@ -10,7 +10,7 @@ from mcp_server_qdrant.port_manager import initialize_port_management, print_ser
 port = initialize_port_management()
 print_server_info()
 
-mcp = EnhancedQdrantMCPServer(
+mcp = QdrantMCPServer(
     tool_settings=ToolSettings(),
     qdrant_settings=QdrantSettings(),
     embedding_provider_settings=EmbeddingProviderSettings(),

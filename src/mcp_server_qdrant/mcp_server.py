@@ -25,7 +25,7 @@ from mcp_server_qdrant.settings import (
 logger = logging.getLogger(__name__)
 
 
-class EnhancedQdrantMCPServer(FastMCP):
+class QdrantMCPServer(FastMCP):
     """
     Enhanced MCP server with improved embedding management and collection handling.
     """
