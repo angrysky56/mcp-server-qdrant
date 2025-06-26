@@ -128,6 +128,16 @@ class QdrantSettings(BaseSettings):
     )
     local_path: str | None = Field(default=None, validation_alias="QDRANT_LOCAL_PATH")
 
+    @model_validator(mode="before")
+    @classmethod
+    def clean_empty_strings(cls, values):
+        """Convert empty strings to None for proper validation."""
+        if isinstance(values, dict):
+            for key, value in values.items():
+                if value == "":
+                    values[key] = None
+        return values
+
     # Increased default search limit for better results
     search_limit: int = Field(default=50, validation_alias="QDRANT_SEARCH_LIMIT")
     read_only: bool = Field(default=False, validation_alias="QDRANT_READ_ONLY")

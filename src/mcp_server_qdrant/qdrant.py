@@ -187,15 +187,18 @@ class QdrantConnector:
     async def _ensure_collection_exists(self, collection_name: str):
         """
         Ensure that the collection exists, creating it if necessary.
+        Uses the CURRENT embedding provider to ensure vector name consistency.
         :param collection_name: The name of the collection to ensure exists.
         """
         collection_exists = await self._client.collection_exists(collection_name)
         if not collection_exists:
-            # Create the collection with the appropriate vector size
+            # CRITICAL: Use the CURRENT embedding provider (which may have been swapped)
+            # This ensures the collection is created with the same vector name that will be used for storage
             vector_size = self._embedding_provider.get_vector_size()
-
-            # Use the vector name as defined in the embedding provider
             vector_name = self._embedding_provider.get_vector_name()
+            
+            logger.info(f"Creating collection '{collection_name}' with vector name '{vector_name}' and size {vector_size}")
+            
             await self._client.create_collection(
                 collection_name=collection_name,
                 vectors_config={
@@ -207,7 +210,6 @@ class QdrantConnector:
             )
 
             # Create payload indexes if configured
-
             if self._field_indexes:
                 for field_name, field_type in self._field_indexes.items():
                     await self._client.create_payload_index(
@@ -343,13 +345,15 @@ class QdrantConnector:
 
     async def batch_store(self, entries: list[BatchEntry], collection_name: str | None = None) -> int:
         """
-        Store multiple entries in batch.
+        Store multiple entries in batch with improved vector name handling.
         :param entries: List of entries to store.
         :param collection_name: Name of the collection to store in.
         :return: Number of entries successfully stored.
         """
         collection_name = collection_name or self._default_collection_name
         assert collection_name is not None
+        
+        # Ensure collection exists with the CURRENT embedding provider
         await self._ensure_collection_exists(collection_name)
 
         try:
@@ -357,26 +361,26 @@ class QdrantConnector:
             documents = [entry.content for entry in entries]
             embeddings = await self._embedding_provider.embed_documents(documents)
 
-            # Get collection info to determine the correct vector name
-            collection_info = await self._client.get_collection(collection_name)
-
-            # Find the first vector configuration name (there should be only one for our collections)
-            vector_name = None
-            if hasattr(collection_info, 'config') and collection_info.config and hasattr(collection_info.config, 'params'):
-                if hasattr(collection_info.config.params, 'vectors'):
-                    vectors_config = collection_info.config.params.vectors
-                    if isinstance(vectors_config, dict) and vectors_config:
-                        vector_name = list(vectors_config.keys())[0]  # Get the first vector name
-
-            # Fallback to provider's vector name if we can't determine from collection
-            if not vector_name:
-                vector_name = self._embedding_provider.get_vector_name()
+            # Get the vector name from the CURRENT embedding provider (not from collection config)
+            # This should match the collection because _ensure_collection_exists uses the same provider
+            vector_name = self._embedding_provider.get_vector_name()
+            
+            logger.info(f"Storing {len(entries)} entries in collection '{collection_name}' with vector name '{vector_name}'")
 
             # Prepare points for batch upload
             points = []
 
             for i, (entry, embedding) in enumerate(zip(entries, embeddings)):
-                point_id = entry.id or uuid.uuid4().hex
+                # Ensure point_id is a valid UUID
+                if entry.id:
+                    try:
+                        # Try to parse as UUID and convert to hex
+                        point_id = str(uuid.UUID(entry.id)).replace('-', '')
+                    except ValueError:
+                        # If not a valid UUID, generate a new one based on the entry ID
+                        point_id = uuid.uuid5(uuid.NAMESPACE_DNS, entry.id).hex
+                else:
+                    point_id = uuid.uuid4().hex
                 payload = {"document": entry.content, METADATA_PATH: entry.metadata}
 
                 points.append(models.PointStruct(
@@ -386,12 +390,25 @@ class QdrantConnector:
                 ))
 
             # Upload in batch
-            await self._client.upsert(
+            result = await self._client.upsert(
                 collection_name=collection_name,
                 points=points,
             )
+            
+            # Verify the upsert actually worked by checking the result
+            if hasattr(result, 'status') and hasattr(result.status, 'error') and result.status.error:
+                logger.error(f"Qdrant upsert error: {result.status.error}")
+                return 0
+                
+            # Double-check by getting collection info
+            info = await self.get_detailed_collection_info(collection_name)
+            if info and info.points_count > 0:
+                logger.info(f"Successfully stored {len(points)} entries. Collection now has {info.points_count} total points.")
+                return len(points)
+            else:
+                logger.error(f"Upsert appeared successful but collection has 0 points - likely vector name mismatch")
+                return 0
 
-            return len(points)
         except Exception as e:
             logger.error(f"Error in batch store: {e}")
             return 0
