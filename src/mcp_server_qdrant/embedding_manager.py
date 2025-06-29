@@ -63,40 +63,21 @@ class EnhancedEmbeddingModelManager:
 
     def _populate_available_models(self):
         """Populate the list of available embedding models."""
-        # FastEmbed models with their actual dimensions
-        # IMPORTANT: Only include models that are ACTUALLY supported by FastEmbed
-        fastembed_models = [
-            # 384D models
-            ("sentence-transformers/all-MiniLM-L6-v2", 384, "Lightweight, fast model good for general use"),
-            ("BAAI/bge-small-en-v1.5", 384, "Compact model optimized for English"),
-            ("snowflake/snowflake-arctic-embed-s", 384, "Snowflake Arctic small variant"),
-            ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", 384, "Multilingual, ~50 languages"),
-
-            # 768D models
-            ("BAAI/bge-base-en-v1.5", 768, "Better quality English embeddings"),
-            ("jinaai/jina-embeddings-v2-base-en", 768, "Jina v2 base English, 8192 token context"),
-            ("thenlper/gte-base", 768, "General text embeddings, base variant"),
-            ("snowflake/snowflake-arctic-embed-m", 768, "Snowflake Arctic medium variant"),
-            ("nomic-ai/nomic-embed-text-v1.5", 768, "Nomic multimodal text embeddings"),
-            ("sentence-transformers/paraphrase-multilingual-mpnet-base-v2", 768, "Multilingual ~50 languages, based on mpnet"),
-
-            # 1024D models
-            ("BAAI/bge-large-en-v1.5", 1024, "Highest quality English embeddings"),
-            ("thenlper/gte-large", 1024, "General text embeddings, large variant"),
-            ("mixedbread-ai/mxbai-embed-large-v1", 1024, "MixedBread AI large embeddings"),
-            ("intfloat/multilingual-e5-large", 1024, "Multilingual E5 large, ~100 languages"),
-            ("jinaai/jina-embeddings-v3", 1024, "Jina v3 multi-task embeddings"),
-        ]
-
-        for model_name, vector_size, description in fastembed_models:
-            self._available_models.append(
-                EmbeddingModelInfo(
-                    model_name=model_name,
-                    provider_type="fastembed",
-                    vector_size=vector_size,
-                    description=description
+        try:
+            from fastembed import TextEmbedding
+            supported_models = TextEmbedding.list_supported_models()
+            # supported_models is a list of dicts with keys: 'model', 'dim', 'description'
+            for model in supported_models:
+                self._available_models.append(
+                    EmbeddingModelInfo(
+                        model_name=model['model'],
+                        provider_type="fastembed",
+                        vector_size=model.get('dim', 0),
+                        description=model.get('description', '')
+                    )
                 )
-            )
+        except Exception as e:
+            logger.error(f"Failed to populate available models: {e}")
 
     async def _ensure_mapping_collection_exists(self):
         """Ensure the model mapping collection exists."""

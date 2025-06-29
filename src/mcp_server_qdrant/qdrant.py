@@ -89,37 +89,22 @@ class QdrantConnector:
         assert collection_name is not None
         await self._ensure_collection_exists(collection_name)
 
-        # Embed the document
         # ToDo: instead of embedding text explicitly, use `models.Document`,
         # it should unlock usage of server-side inference.
-        embeddings = await self._embedding_provider.embed_documents([entry.content])
 
-        # Get collection info to determine the correct vector name
-        collection_info = await self._client.get_collection(collection_name)
+        # The embedding is now done on the server-side.
+        # We use `upsert` with `models.Record` to let Qdrant handle embedding.
+        records = [
+            models.Record(
+                id=uuid.uuid4().hex,
+                payload={"document": entry.content, METADATA_PATH: entry.metadata or {}},
+            )
+        ]
 
-        # Find the first vector configuration name (there should be only one for our collections)
-        vector_name = None
-        if hasattr(collection_info, 'config') and collection_info.config and hasattr(collection_info.config, 'params'):
-            if hasattr(collection_info.config.params, 'vectors'):
-                vectors_config = collection_info.config.params.vectors
-                if isinstance(vectors_config, dict) and vectors_config:
-                    vector_name = list(vectors_config.keys())[0]  # Get the first vector name
-
-        # Fallback to provider's vector name if we can't determine from collection
-        if not vector_name:
-            vector_name = self._embedding_provider.get_vector_name()
-
-        # Add to Qdrant
-        payload = {"document": entry.content, METADATA_PATH: entry.metadata}
-        await self._client.upsert(
+        self._client.upload_records(
             collection_name=collection_name,
-            points=[
-                models.PointStruct(
-                    id=uuid.uuid4().hex,
-                    vector={vector_name: embeddings[0]},
-                    payload=payload,
-                )
-            ],
+            records=records,
+            wait=True,
         )
 
     async def search(
@@ -131,57 +116,90 @@ class QdrantConnector:
         query_filter: models.Filter | None = None,
     ) -> list[Entry]:
         """
-        Find points in the Qdrant collection. If there are no entries found, an empty list is returned.
+        Modern search using Query API with intelligent fallback to resolve vector name mismatches.
+        Tries server-side embedding first, falls back to client-side if needed.
+
         :param query: The query to use for the search.
-        :param collection_name: The name of the collection to search in, optional. If not provided,
-                                the default collection is used.
+        :param collection_name: The name of the collection to search in.
         :param limit: The maximum number of entries to return.
         :param query_filter: The filter to apply to the query, if any.
-
         :return: A list of entries found.
         """
         collection_name = collection_name or self._default_collection_name
         assert collection_name is not None
+
         collection_exists = await self._client.collection_exists(collection_name)
         if not collection_exists:
             return []
 
-        # Embed the query
-        # ToDo: instead of embedding text explicitly, use `models.Document`,
-        # it should unlock usage of server-side inference.
+        # Try server-side embedding first (more efficient)
+        try:
+            logger.debug(f"Attempting server-side embedding for collection '{collection_name}'")
+            return await self._search_server_side(query, collection_name, limit, query_filter)
+        except Exception as server_error:
+            logger.warning(f"Server-side embedding failed: {server_error}")
 
-        query_vector = await self._embedding_provider.embed_query(query)
+            # Fallback to client-side embedding (guaranteed consistency)
+            try:
+                logger.debug(f"Falling back to client-side embedding for collection '{collection_name}'")
+                return await self._search_client_side(query, collection_name, limit, query_filter)
+            except Exception as client_error:
+                logger.error(f"Both server-side and client-side embedding failed: {client_error}")
+                return []
 
-        # Get collection info to determine the correct vector name
-        collection_info = await self._client.get_collection(collection_name)
+    async def _search_server_side(
+        self,
+        query: str,
+        collection_name: str,
+        limit: int,
+        query_filter: models.Filter | None
+    ) -> list[Entry]:
+        """Server-side embedding using Qdrant's FastEmbed integration."""
 
-        # Find the first vector configuration name (there should be only one for our collections)
-        vector_name = None
-        if hasattr(collection_info, 'config') and collection_info.config and hasattr(collection_info.config, 'params'):
-            if hasattr(collection_info.config.params, 'vectors'):
-                vectors_config = collection_info.config.params.vectors
-                if isinstance(vectors_config, dict) and vectors_config:
-                    vector_name = list(vectors_config.keys())[0]  # Get the first vector name
-
-        # Fallback to provider's vector name if we can't determine from collection
-        if not vector_name:
-            vector_name = self._embedding_provider.get_vector_name()
-
-        # Search in Qdrant
-        search_results = await self._client.query_points(
+        # Use modern Query API with server-side embedding
+        search_results_raw = await self._client.query_points(
             collection_name=collection_name,
-            query=query_vector,
-            using=vector_name,
+            query=query,  # Let Qdrant handle embedding server-side
             limit=limit,
             query_filter=query_filter,
+            with_payload=True,
+            with_vectors=False,
         )
 
+        return self._process_search_results(search_results_raw.points)
+
+    async def _search_client_side(
+        self,
+        query: str,
+        collection_name: str,
+        limit: int,
+        query_filter: models.Filter | None
+    ) -> list[Entry]:
+        """Client-side embedding for guaranteed consistency."""
+
+        # Embed query using current embedding provider
+        query_vector = await self._embedding_provider.embed_query(query)
+
+        # Use modern Query API with client-side embedding
+        search_results_raw = await self._client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=limit,
+            query_filter=query_filter,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        return self._process_search_results(search_results_raw.points)
+
+    def _process_search_results(self, points: list[models.ScoredPoint]) -> list[Entry]:
+        """Process search results into Entry objects."""
         return [
             Entry(
-                content=(result.payload["document"] if result.payload and "document" in result.payload else ""),
-                metadata=(result.payload.get("metadata") if result.payload else None),
+                content=(point.payload["document"] if point.payload and "document" in point.payload else ""),
+                metadata=(point.payload.get(METADATA_PATH) if point.payload else None),
             )
-            for result in search_results.points
+            for point in points
         ]
 
     async def _ensure_collection_exists(self, collection_name: str):
@@ -196,9 +214,9 @@ class QdrantConnector:
             # This ensures the collection is created with the same vector name that will be used for storage
             vector_size = self._embedding_provider.get_vector_size()
             vector_name = self._embedding_provider.get_vector_name()
-            
+
             logger.info(f"Creating collection '{collection_name}' with vector name '{vector_name}' and size {vector_size}")
-            
+
             await self._client.create_collection(
                 collection_name=collection_name,
                 vectors_config={
@@ -352,62 +370,36 @@ class QdrantConnector:
         """
         collection_name = collection_name or self._default_collection_name
         assert collection_name is not None
-        
+
         # Ensure collection exists with the CURRENT embedding provider
         await self._ensure_collection_exists(collection_name)
 
         try:
-            # Prepare all documents for embedding
-            documents = [entry.content for entry in entries]
-            embeddings = await self._embedding_provider.embed_documents(documents)
-
-            # Get the vector name from the CURRENT embedding provider (not from collection config)
-            # This should match the collection because _ensure_collection_exists uses the same provider
-            vector_name = self._embedding_provider.get_vector_name()
-            
-            logger.info(f"Storing {len(entries)} entries in collection '{collection_name}' with vector name '{vector_name}'")
-
-            # Prepare points for batch upload
-            points = []
-
-            for i, (entry, embedding) in enumerate(zip(entries, embeddings)):
-                # Ensure point_id is a valid UUID
+            records = []
+            for entry in entries:
                 if entry.id:
                     try:
-                        # Try to parse as UUID and convert to hex
-                        point_id = str(uuid.UUID(entry.id)).replace('-', '')
+                        point_id = str(uuid.UUID(entry.id)).replace("-", "")
                     except ValueError:
-                        # If not a valid UUID, generate a new one based on the entry ID
                         point_id = uuid.uuid5(uuid.NAMESPACE_DNS, entry.id).hex
                 else:
                     point_id = uuid.uuid4().hex
-                payload = {"document": entry.content, METADATA_PATH: entry.metadata}
 
-                points.append(models.PointStruct(
-                    id=point_id,
-                    vector={vector_name: embedding},
-                    payload=payload,
-                ))
+                records.append(
+                    models.Record(
+                        id=point_id,
+                        payload={"document": entry.content, METADATA_PATH: entry.metadata or {}},
+                    )
+                )
 
-            # Upload in batch
-            result = await self._client.upsert(
+            self._client.upload_records(
                 collection_name=collection_name,
-                points=points,
+                records=records,
+                wait=True,
             )
-            
-            # Verify the upsert actually worked by checking the result
-            if hasattr(result, 'status') and hasattr(result.status, 'error') and result.status.error:
-                logger.error(f"Qdrant upsert error: {result.status.error}")
-                return 0
-                
-            # Double-check by getting collection info
-            info = await self.get_detailed_collection_info(collection_name)
-            if info and info.points_count > 0:
-                logger.info(f"Successfully stored {len(points)} entries. Collection now has {info.points_count} total points.")
-                return len(points)
-            else:
-                logger.error(f"Upsert appeared successful but collection has 0 points - likely vector name mismatch")
-                return 0
+
+            logger.info(f"Successfully stored {len(records)} entries in collection '{collection_name}'.")
+            return len(records)
 
         except Exception as e:
             logger.error(f"Error in batch store: {e}")
@@ -475,7 +467,8 @@ class QdrantConnector:
         search_params: dict | None = None
     ) -> list[tuple[Entry, float]]:
         """
-        Perform hybrid search with scoring.
+        Modern hybrid search using Query API with intelligent fallback to avoid vector name mismatches.
+
         :param query: The search query.
         :param collection_name: Name of the collection to search.
         :param limit: Maximum number of results.
@@ -486,37 +479,78 @@ class QdrantConnector:
         """
         collection_name = collection_name or self._default_collection_name
         assert collection_name is not None
+
         collection_exists = await self._client.collection_exists(collection_name)
         if not collection_exists:
             return []
 
+        # Try server-side first, fallback to client-side
         try:
-            query_vector = await self._embedding_provider.embed_query(query)
-            vector_name = self._embedding_provider.get_vector_name()
+            logger.debug(f"Attempting server-side hybrid search for collection '{collection_name}'")
+            return await self._hybrid_search_server_side(query, collection_name, limit, query_filter, min_score)
+        except Exception as server_error:
+            logger.warning(f"Server-side hybrid search failed: {server_error}")
 
-            # Prepare search parameters
-            params = search_params or {}
+            try:
+                logger.debug(f"Falling back to client-side hybrid search for collection '{collection_name}'")
+                return await self._hybrid_search_client_side(query, collection_name, limit, query_filter, min_score)
+            except Exception as client_error:
+                logger.error(f"Both server-side and client-side hybrid search failed: {client_error}")
+                return []
 
-            search_results = await self._client.query_points(
-                collection_name=collection_name,
-                query=query_vector,
-                using=vector_name,
-                limit=limit,
-                query_filter=query_filter,
-                score_threshold=min_score,
-                **params
+    async def _hybrid_search_server_side(
+        self,
+        query: str,
+        collection_name: str,
+        limit: int,
+        query_filter: models.Filter | None,
+        min_score: float | None,
+    ) -> list[tuple[Entry, float]]:
+        """Server-side hybrid search using Query API."""
+
+        search_results_raw = await self._client.query_points(
+            collection_name=collection_name,
+            query=query,  # Server-side embedding
+            limit=limit,
+            query_filter=query_filter,
+            with_payload=True,
+            with_vectors=False,
+            score_threshold=min_score,
+        )
+
+        return self._process_scored_results(search_results_raw.points)
+
+    async def _hybrid_search_client_side(
+        self,
+        query: str,
+        collection_name: str,
+        limit: int,
+        query_filter: models.Filter | None,
+        min_score: float | None,
+    ) -> list[tuple[Entry, float]]:
+        """Client-side hybrid search using Query API."""
+
+        query_vector = await self._embedding_provider.embed_query(query)
+
+        search_results_raw = await self._client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=limit,
+            query_filter=query_filter,
+            with_payload=True,
+            with_vectors=False,
+            score_threshold=min_score,
+        )
+
+        return self._process_scored_results(search_results_raw.points)
+
+    def _process_scored_results(self, points: list[models.ScoredPoint]) -> list[tuple[Entry, float]]:
+        """Process scored search results into (Entry, score) tuples."""
+        results = []
+        for point in points:
+            entry = Entry(
+                content=(point.payload["document"] if point.payload and "document" in point.payload else ""),
+                metadata=(point.payload.get(METADATA_PATH) if point.payload else None),
             )
-
-            results = []
-            for result in search_results.points:
-                entry = Entry(
-                    content=(result.payload["document"] if result.payload and "document" in result.payload else ""),
-                    metadata=(result.payload.get(METADATA_PATH) if result.payload else None),
-                )
-                score = result.score if hasattr(result, 'score') else 0.0
-                results.append((entry, score))
-
-            return results
-        except Exception as e:
-            logger.error(f"Error in hybrid search: {e}")
-            return []
+            results.append((entry, point.score))
+        return results

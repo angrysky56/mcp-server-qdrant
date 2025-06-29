@@ -47,6 +47,8 @@ class FastEmbedProvider(EmbeddingProvider):
         model_description: DenseModelDescription = (
             self.embedding_model._get_model_description(self.model_name)
         )
+        if model_description.dim is None:
+            raise ValueError("Model dimension (dim) is None for model: {}".format(self.model_name))
         return model_description.dim
 
     def get_model_name(self) -> str:
