@@ -164,3 +164,4 @@ cython_debug/
 # Project-specific settings
 .aider*
 src/qdrant_data/
+qdrant_storage

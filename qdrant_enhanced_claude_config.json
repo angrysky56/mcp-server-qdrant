@@ -12,7 +12,6 @@
         "QDRANT_MODE": "docker-auto",
         "QDRANT_API_KEY": "",
         "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
-        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
         "QDRANT_ENABLE_RESOURCES": "true"
       }
     }

@@ -236,7 +236,9 @@ def setup_qdrant_config():
         # Docker auto-management (if requested)
         auto_docker = os.environ.get("QDRANT_AUTO_DOCKER", "false").lower() == "true"
         if auto_docker:
-            setup_docker_qdrant()
+            # The docker container is now managed by docker_utils.py
+            # No action needed here for auto-docker, as it's handled at main.py entry point
+            pass
         else:
             # Use manual Docker setup
             qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
@@ -248,86 +250,7 @@ def setup_qdrant_config():
         print(f"🌐 Using external Qdrant: {qdrant_url}")
 
 
-def setup_docker_qdrant():
-    """Setup auto-managed Docker Qdrant with port switching."""
-    try:
-        import subprocess
-        import json
 
-        # Check if Docker is available
-        result = subprocess.run(["docker", "--version"], capture_output=True, text=True)
-        if result.returncode != 0:
-            print("⚠️  Docker not available, falling back to embedded mode")
-            os.environ["QDRANT_MODE"] = "embedded"
-            setup_qdrant_config()
-            return
-
-        container_name = "mcp-qdrant-auto"
-
-        # Check if container already exists
-        result = subprocess.run(
-            ["docker", "ps", "-a", "--format", "json", "--filter", f"name={container_name}"],
-            capture_output=True, text=True
-        )
-
-        if result.returncode == 0 and result.stdout.strip():
-            # Container exists, check if running
-            container_info = json.loads(result.stdout.strip())
-            if container_info.get("State") == "running":
-                # Get the port
-                ports_result = subprocess.run(
-                    ["docker", "port", container_name, "6333"],
-                    capture_output=True, text=True
-                )
-                if ports_result.returncode == 0:
-                    port = ports_result.stdout.strip().split(":")[-1]
-                    os.environ["QDRANT_URL"] = f"http://localhost:{port}"
-                    print(f"✅ Using existing Qdrant container on port {port}")
-                    return
-            else:
-                # Start existing container
-                subprocess.run(["docker", "start", container_name], capture_output=True)
-                print("🔄 Started existing Qdrant container")
-
-        # Find available port for new container
-        qdrant_port = 6333
-        if not PortManager.is_port_available(qdrant_port):
-            # Find alternative port
-            qdrant_port = PortManager.find_available_port(
-                preferred_port=6333,
-                start_port=6333,
-                end_port=6350
-            )
-            print(f"⚠️  Port 6333 busy, using port {qdrant_port} for Qdrant")
-
-        # Create data directory
-        data_path = os.path.abspath("./qdrant_data")
-        os.makedirs(data_path, exist_ok=True)
-
-        # Start new container
-        cmd = [
-            "docker", "run", "-d",
-            "--name", container_name,
-            "-p", f"{qdrant_port}:6333",
-            "-v", f"{data_path}:/qdrant/storage",
-            "qdrant/qdrant:latest"
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            os.environ["QDRANT_URL"] = f"http://localhost:{qdrant_port}"
-            print(f"🚀 Started Qdrant container on port {qdrant_port}")
-        else:
-            print(f"❌ Failed to start Qdrant container: {result.stderr}")
-            print("🔄 Falling back to embedded mode")
-            os.environ["QDRANT_MODE"] = "embedded"
-            setup_qdrant_config()
-
-    except Exception as e:
-        print(f"❌ Docker setup failed: {e}")
-        print("🔄 Falling back to embedded mode")
-        os.environ["QDRANT_MODE"] = "embedded"
-        setup_qdrant_config()
 
 
 def print_server_info():

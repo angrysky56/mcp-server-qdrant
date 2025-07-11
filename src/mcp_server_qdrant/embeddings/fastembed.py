@@ -14,7 +14,7 @@ class FastEmbedProvider(EmbeddingProvider):
 
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self.embedding_model = TextEmbedding(model_name)
+        self.embedding_model = TextEmbedding(model_name, device="cpu")
 
     async def embed_documents(self, documents: list[str]) -> list[list[float]]:
         """Embed a list of documents into vectors."""

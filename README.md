@@ -151,9 +151,9 @@ Use this Claude Desktop config:
       "args": ["mcp-server-qdrant"],
       "env": {
         "QDRANT_MODE": "docker",
-        "QDRANT_AUTO_DOCKER": "true",
+        "QDRANT_API_KEY": "",
         "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
-        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true"
+        "QDRANT_ENABLE_RESOURCES": "true"
       }
     }
   }

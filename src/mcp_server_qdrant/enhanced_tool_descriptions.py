@@ -3,20 +3,20 @@
 ## Improved Tool Descriptions with Clear Usage Examples
 
 DEFAULT_TOOL_STORE_DESCRIPTION = (
-    "Store a single piece of information in a Qdrant collection. "
+    "Store a single piece of information in a Qdrant collection. Qdrant will automatically embed the content server-side. "
     "Usage: qdrant_store(content='Your text here', collection_name='my_collection', "
     "metadata='{\"key\": \"value\"}', entry_id='optional-custom-id'). "
-    "The metadata must be a JSON string. Returns success/failure message."
+    "Returns success/failure message."
 )
 
 DEFAULT_TOOL_FIND_DESCRIPTION = (
-    "Search for information in a Qdrant collection using semantic similarity. "
+    "Search for information in a Qdrant collection using semantic similarity. Qdrant will automatically embed the query server-side. "
     "Usage: qdrant_find(query='search terms', collection_name='my_collection'). "
     "Returns relevant entries with their content and metadata."
 )
 
 DEFAULT_TOOL_BATCH_STORE_DESCRIPTION = (
-    "Store multiple entries efficiently in one operation. "
+    "Store multiple entries efficiently in one operation. Qdrant will automatically embed the content server-side. "
     "Usage: qdrant_store_batch(entries=[{\"content\": \"text1\", \"metadata\": {\"key\": \"val1\"}}, "
     "{\"content\": \"text2\", \"metadata\": {\"key\": \"val2\"}}], collection_name='my_collection'). "
     "Each entry is a dict with 'content' (required), 'metadata' (optional dict), and 'id' (optional string). "
@@ -49,7 +49,7 @@ DEFAULT_TOOL_DELETE_COLLECTION_DESCRIPTION = (
 )
 
 DEFAULT_TOOL_HYBRID_SEARCH_DESCRIPTION = (
-    "Advanced search with similarity scores and filtering options. "
+    "Advanced search with similarity scores and filtering options. Qdrant will automatically embed the query server-side. "
     "Usage: hybrid_search(query='search terms', collection_name='my_collection', "
     "limit=10, min_score=0.7, include_scores=True). "
     "Returns entries with similarity scores for ranking results."

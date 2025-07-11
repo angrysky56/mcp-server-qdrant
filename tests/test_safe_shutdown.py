@@ -44,11 +44,11 @@ def test_safe_initialization():
         print("   ✅ Qdrant client connections are automatically closed")
         print("   ✅ Embedded storage persists to disk safely")
 
-        return True
+        assert True
 
     except Exception as e:
         print(f"❌ Error: {e}")
-        return False
+        assert False
 
     finally:
         os.environ.pop("QDRANT_LOCAL_PATH", None)

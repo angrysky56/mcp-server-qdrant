@@ -11,7 +11,7 @@ from mcp_server_qdrant.settings import (
 
 # Configure logging to stderr to avoid stdout contamination in MCP mode
 logging.basicConfig(
-    level=logging.WARNING,  # Only show warnings/errors
+    level=logging.INFO,  # Set to INFO to see informational messages from docker_utils
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     stream=sys.stderr  # Always use stderr for logs
 )
