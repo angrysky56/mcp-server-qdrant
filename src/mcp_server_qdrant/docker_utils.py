@@ -68,15 +68,19 @@ def start_qdrant_container():
 
 def wait_for_qdrant_ready(timeout=60, interval=1):
     """Waits until the Qdrant service is ready."""
-    qdrant_url = "http://localhost:6333/healthz"
+    qdrant_url = "http://localhost:6333/readyz"
     start_time = time.time()
     logger.info(f"Waiting for Qdrant to be ready at {qdrant_url}...")
     while time.time() - start_time < timeout:
         try:
             response = requests.get(qdrant_url, timeout=interval)
-            if response.status_code == 200 and response.json().get("status") == "ok":
-                logger.info("Qdrant is ready!")
-                return
+            if response.status_code == 200:
+                # Qdrant health endpoints return plain text, not JSON
+                # /readyz returns "all shards are ready" when fully ready
+                response_text = response.text.strip().lower()
+                if "ready" in response_text:
+                    logger.info("Qdrant is ready!")
+                    return
         except requests.exceptions.ConnectionError:
             pass  # Qdrant not yet available
         except Exception as e:
