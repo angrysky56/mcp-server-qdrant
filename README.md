@@ -146,13 +146,20 @@ Use this Claude Desktop config:
 ```json
 {
   "mcpServers": {
-    "mcp-server-qdrant": {
-      "command": "uvx",
-      "args": ["mcp-server-qdrant"],
+    "mcp-server-qdrant-enhanced": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/ty/Repositories/mcp-server-qdrant/src",
+        "run",
+        "mcp-server-qdrant"
+      ],
       "env": {
         "QDRANT_MODE": "docker",
+        "QDRANT_AUTO_DOCKER": "true",
         "QDRANT_API_KEY": "",
         "QDRANT_ENABLE_COLLECTION_MANAGEMENT": "true",
+        "QDRANT_ENABLE_DYNAMIC_EMBEDDING_MODELS": "true",
         "QDRANT_ENABLE_RESOURCES": "true"
       }
     }

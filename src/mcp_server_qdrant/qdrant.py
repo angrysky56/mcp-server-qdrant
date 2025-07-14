@@ -89,13 +89,15 @@ class QdrantConnector:
         assert collection_name is not None
         await self._ensure_collection_exists(collection_name)
 
-        # Use `models.PointStruct` with `text` field for server-side embedding.
-        # Qdrant will automatically embed the `text` field if a text index is configured.
+        # Embed the document
+        embeddings = await self._embedding_provider.embed_documents([entry.content])
+        
+        # Use `models.PointStruct` with actual embeddings
         points = [
             models.PointStruct(
                 id=uuid.uuid4().hex,
                 payload={"document": entry.content, METADATA_PATH: entry.metadata or {}},
-                vector={self._embedding_provider.get_vector_name(): [0.0] * self._embedding_provider.get_vector_size()}, # Dummy vector
+                vector={self._embedding_provider.get_vector_name(): embeddings[0]},
             )
         ]
 
@@ -174,7 +176,6 @@ class QdrantConnector:
             query_filter=query_filter,
             with_payload=True,
             with_vectors=False,
-            score_threshold=min_score,
         )
 
         return self._process_search_results(search_results_raw.points)
@@ -370,7 +371,17 @@ class QdrantConnector:
 
         try:
             points = []
+            documents = []
+            
+            # Collect all documents for batch embedding
             for entry in entries:
+                documents.append(entry.content)
+            
+            # Embed all documents at once
+            embeddings = await self._embedding_provider.embed_documents(documents)
+            
+            # Create points with actual embeddings
+            for i, entry in enumerate(entries):
                 if entry.id:
                     try:
                         point_id = str(uuid.UUID(entry.id)).replace("-", "")
@@ -383,7 +394,7 @@ class QdrantConnector:
                     models.PointStruct(
                         id=point_id,
                         payload={"document": entry.content, METADATA_PATH: entry.metadata or {}},
-                        vector={self._embedding_provider.get_vector_name(): [0.0] * self._embedding_provider.get_vector_size()}, # Dummy vector
+                        vector={self._embedding_provider.get_vector_name(): embeddings[i]},
                     )
                 )
 
@@ -393,8 +404,8 @@ class QdrantConnector:
                 wait=True,
             )
 
-            logger.info(f"Successfully stored {len(records)} entries in collection '{collection_name}'.")
-            return len(records)
+            logger.info(f"Successfully stored {len(entries)} entries in collection '{collection_name}'.")
+            return len(entries)
 
         except Exception as e:
             logger.error(f"Error in batch store: {e}")
@@ -525,6 +536,8 @@ class QdrantConnector:
             with_vectors=False,
             score_threshold=min_score,
         )
+        
+        return self._process_scored_results(search_results_raw.points)
 
     def _process_scored_results(self, points: list[models.ScoredPoint]) -> list[tuple[Entry, float]]:
         """Process scored search results into (Entry, score) tuples."""
